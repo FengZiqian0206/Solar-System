@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=color-contrast-1';
+import { THREE, context } from './renderer-support.js?v=size-contrast-2';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -34,7 +34,7 @@ void main(){
  float sizeFactor=.82+aSeed*.36;if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
- vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float radius=.38+pow(vRatio,2.45)*10.6;if(vRatio<=.281)radius*=.72;gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*(340./-mv.z),.35,17.);
+ vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float radius=.38+pow(vRatio,3.25)*10.6;if(vRatio<=.281)radius*=.72;gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*(340./-mv.z),.35,17.);
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio,vSeed;
