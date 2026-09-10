@@ -4,3 +4,10 @@
 
 #splash{animation:splash-timeout .9s ease 1s forwards}
 @keyframes splash-timeout{to{opacity:0;visibility:hidden}}
+
+/* Keep the hologram inside its grid row so the data panel starts on a clean edge. */
+.app{grid-template-rows:74px minmax(0,68fr) minmax(0,32fr)}
+.workspace,.hologram,#viewport,.data-panel,.table-wrap{min-height:0}
+.workspace{align-items:stretch}
+.hologram{overflow:hidden}
+.data-panel{position:relative;z-index:2;overflow:hidden}
