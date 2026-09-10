@@ -34,7 +34,7 @@ void main(){
  float sizeFactor=1.;if(ratio<=.281)sizeFactor+=.22*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
- vRatio=clamp(ratio,0.,1.);vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float radius=.72+pow(vRatio,2.15)*8.8;gl_PointSize=clamp(radius*2.*sizeFactor*uPixelRatio*(340./-mv.z),1.,34.);
+ vRatio=clamp(ratio,0.,1.);vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float radius=.72+pow(vRatio,2.15)*8.8;if(vRatio<=.281)radius*=.55;gl_PointSize=clamp(radius*2.*sizeFactor*uPixelRatio*(340./-mv.z),1.,34.);
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio;
