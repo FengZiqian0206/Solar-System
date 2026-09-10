@@ -18,5 +18,6 @@ if (!context) {
   error.code = 'WEBGL_UNAVAILABLE';
   throw error;
 }
-const THREE = await import(webgl2 ? './vendor/three/three.module.js' : './vendor/three-r162/three.module.js');
+const libraryUrl = new URL(webgl2 ? './vendor/three/three.module.js' : './vendor/three-r162/three.module.js', import.meta.url).href;
+const THREE = await import(libraryUrl);
 export { THREE, context, webgl2 };

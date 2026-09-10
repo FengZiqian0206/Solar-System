@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=compat-1';
+import { THREE, context } from './renderer-support.js?v=pages-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],

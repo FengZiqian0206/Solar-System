@@ -26,7 +26,9 @@
     panel.append(retry);
   }
   const timeout = setTimeout(() => showFailure('资源加载超时，请检查网络后重试。 · Loading timed out. Please retry.'), 20000);
-  import('./app.js?v=compat-1').then(() => {
+  // Resolve against the page, not the classic script's possibly opaque origin.
+  const appUrl = new URL('./app.js?v=pages-1', document.baseURI).href;
+  import(appUrl).then(() => {
     clearTimeout(timeout);
     panel.hidden = true;
     panel.style.display = 'none';
