@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="基于立方点阵的交互式太阳系全息图" />
+  <title>太阳系漫游指南 · Solar System Touring Guide</title>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">
+    {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}
+  </script>
+</head>
+<body>
+  <div id="splash" aria-hidden="true"><div class="logo logo--large"></div></div>
+  <main class="app">
+    <header class="masthead">
+      <div class="brand"><div class="logo"></div><div><div class="eyebrow">CUBIC LATTICE STUDY · WEB</div><h1>太阳系漫游指南 <span>· Solar System Touring Guide</span></h1></div></div>
+      <div id="status" class="status">● 运行中 · RUNNING</div>
+    </header>
+
+    <section class="workspace">
+      <aside class="controls">
+        <h2>点阵控制 · LATTICE CONTROLS</h2>
+        <div class="control-row"><label for="density">立方网格密度<br><small>CUBIC GRID DENSITY</small></label><output id="densityValue">50 × 50 × 50</output></div>
+        <input id="density" type="range" min="30" max="50" value="50" aria-label="立方网格密度" />
+        <div class="control-row"><label for="speed">时间压缩速度<br><small>TIME COMPRESSION</small></label><output id="speedValue">5 天/秒 · DAYS/S</output></div>
+        <input id="speed" type="range" min="0" max="5" value="0" aria-label="时间压缩速度" />
+        <button id="pause">Ⅱ&nbsp;&nbsp;暂停公转 · PAUSE ORBITS</button>
+        <button id="resetView">↺&nbsp;&nbsp;重置三维视角 · RESET VIEW</button>
+        <button id="frontView">□&nbsp;&nbsp;正视图 · FRONT VIEW</button>
+        <button id="topView">◇&nbsp;&nbsp;顶视图 · TOP VIEW</button>
+        <button id="resetPlanets">↺&nbsp;&nbsp;重置行星位置 · RESET PLANETS</button>
+        <div class="stat"><small>网格点 · GRID POINTS</small><strong id="pointCount">125,000</strong></div>
+        <div class="info"><b>点阵规则 · LATTICE RULES</b><br>每个点位于立方网格交点。<br>Every point sits on the cubic grid.</div>
+        <div class="info"><b>运动规则 · MOTION RULES</b><br>真实周期比例，压缩时间显示。<br>Real period ratios with compressed time.</div>
+      </aside>
+
+      <section id="hologram" class="hologram">
+        <div class="chartbar"><h2>太阳系全息图 · SOLAR SYSTEM HOLOGRAM</h2><div class="chart-actions"><span>拖动旋转 · DRAG&nbsp;&nbsp;&nbsp;滚轮缩放 · ZOOM</span><button id="fullscreen" class="fullscreen" aria-label="全屏 · Full screen" title="全屏 · Full screen"><i></i></button></div></div>
+        <div id="viewport"><canvas id="canvas"></canvas><svg id="leaders" aria-hidden="true"></svg><div id="labels"></div><div id="sceneInfo"></div><div id="webglError" hidden>当前浏览器无法使用 WebGL。<br>WebGL is unavailable in this browser.</div></div>
+      </section>
+    </section>
+
+    <section class="data-panel">
+      <div class="data-head"><h2>八大行星数据 · EIGHT PLANETS</h2><span>NASA / JPL MEAN PARAMETERS</span><input id="search" placeholder="筛选行星名称 · FILTER PLANETS…" /></div>
+      <div class="table-wrap"><table><thead><tr><th>行星 · PLANET</th><th>轨道半长轴 · SEMI-MAJOR AXIS (AU)</th><th>公转周期 · PERIOD (DAYS)</th><th>公转周期 · PERIOD (EARTH YEARS)</th><th>平均轨道速度 · MEAN SPEED (km/s)</th><th>平均半径 · MEAN RADIUS (km)</th></tr></thead><tbody id="planetRows"></tbody></table></div>
+    </section>
+  </main>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
