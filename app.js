@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from './vendor/three/three.module.js';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -51,7 +51,9 @@ function rebuild(){
 }
 function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge)});material.uniforms.uSaturn.value.copy(next[6].pos)}
 function init(){
-  try{renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();requestAnimationFrame(frame)}catch(e){$('#webglError').hidden=false;$('#webglError').style.display='grid';console.error(e)}
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'default'});
+  renderer.debug.onShaderError=()=>{throw new Error('点云着色器无法编译 · Shader compilation failed')};
+  renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
 function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){simDays+=dt*daysPerSecond;updateBodies()}material.uniforms.uTime.value=now/1000;cloud.rotation.set(pitch,yaw,0);camera.position.z=78/zoom;renderer.render(scene,camera);updateLabels();$('#sceneInfo').textContent=`CUBIC LATTICE  ${gridSize}³   ·   ${(gridSize**3).toLocaleString()} POINTS   ·   ${(simDays/365.256).toFixed(2)} EARTH YEARS`;requestAnimationFrame(frame)}
@@ -64,4 +66,4 @@ viewport.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};viewp
 $('#density').addEventListener('input',e=>{$('#densityValue').textContent=`${e.target.value} × ${e.target.value} × ${e.target.value}`});$('#density').addEventListener('change',e=>{gridSize=+e.target.value;rebuild()});$('#speed').addEventListener('input',e=>{daysPerSecond=SPEEDS[+e.target.value];$('#speedValue').textContent=`${daysPerSecond} 天/秒 · DAYS/S`});$('#pause').onclick=()=>{paused=!paused;$('#pause').innerHTML=paused?'▶&nbsp;&nbsp;继续公转 · RESUME ORBITS':'Ⅱ&nbsp;&nbsp;暂停公转 · PAUSE ORBITS';$('#status').textContent=paused?'● 已暂停 · PAUSED':'● 运行中 · RUNNING'};$('#resetView').onclick=()=>setView(.66,-.42);$('#frontView').onclick=()=>setView(0,0);$('#topView').onclick=()=>setView(0,-Math.PI/2);$('#resetPlanets').onclick=()=>{simDays=0;updateBodies()};
 $('#fullscreen').onclick=async()=>{if(!document.fullscreenElement)await $('#hologram').requestFullscreen();else await document.exitFullscreen()};document.addEventListener('fullscreenchange',()=>$('#fullscreen').classList.toggle('exit',!!document.fullscreenElement));
 function rows(filter=''){const f=filter.trim().toLowerCase();$('#planetRows').innerHTML=PLANETS.filter(p=>!f||p[0].includes(f)||p[1].toLowerCase().includes(f)).map(p=>`<tr><td>${p[0]}&nbsp;&nbsp;${p[1]}</td><td>${p[2].toFixed(4)}</td><td>${p[3].toLocaleString(undefined,{maximumFractionDigits:3})}</td><td>${(p[3]/365.256).toFixed(3)}</td><td>${p[5].toFixed(2)}</td><td>${p[6].toLocaleString()}</td></tr>`).join('')}rows();$('#search').addEventListener('input',e=>rows(e.target.value));new ResizeObserver(resize).observe(viewport);
-setTimeout(()=>$('#splash').classList.add('fade'),1000);setTimeout(()=>$('#splash').remove(),1950);init();
+init();
