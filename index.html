@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="基于立方点阵的交互式太阳系全息图" />
   <title>太阳系漫游指南 · Solar System Touring Guide</title>
-  <link rel="stylesheet" href="./style.css?v=layout-1" />
+  <link rel="stylesheet" href="./style.css?v=view-icon-1" />
 </head>
 <body>
   <div id="splash" aria-hidden="true"><div class="logo logo--large"></div></div>
@@ -33,7 +33,7 @@
       </aside>
 
       <section id="hologram" class="hologram">
-        <div class="chartbar"><h2>太阳系全息图 · SOLAR SYSTEM HOLOGRAM</h2><div class="chart-actions"><span>拖动旋转 · DRAG&nbsp;&nbsp;&nbsp;滚轮缩放 · ZOOM</span><button id="fullscreen" class="fullscreen" aria-label="全屏 · Full screen" title="全屏 · Full screen"><i></i></button></div></div>
+        <div class="chartbar"><h2>太阳系全息图 · SOLAR SYSTEM HOLOGRAM</h2><div class="chart-actions"><span>拖动旋转 · DRAG&nbsp;&nbsp;&nbsp;滚轮缩放 · ZOOM</span><button id="fullscreen" class="fullscreen" aria-label="全屏 · Full screen" title="全屏 · Full screen"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="expand-icon" d="M8 3H3v5M16 3h5v5M21 16v5h-5M3 16v5h5"/><path class="collapse-icon" d="M9 3v6H3M15 3v6h6M21 15h-6v6M3 15h6v6"/></svg></button></div></div>
         <div id="viewport"><canvas id="canvas"></canvas><svg id="leaders" aria-hidden="true"></svg><div id="labels"></div><div id="sceneInfo"></div><div id="webglError" hidden>当前浏览器无法使用 WebGL。<br>WebGL is unavailable in this browser.</div></div>
       </section>
     </section>
@@ -43,6 +43,6 @@
       <div class="table-wrap"><table><thead><tr><th>行星 · PLANET</th><th>轨道半长轴 · SEMI-MAJOR AXIS (AU)</th><th>公转周期 · PERIOD (DAYS)</th><th>公转周期 · PERIOD (EARTH YEARS)</th><th>平均轨道速度 · MEAN SPEED (km/s)</th><th>平均半径 · MEAN RADIUS (km)</th></tr></thead><tbody id="planetRows"></tbody></table></div>
     </section>
   </main>
-  <script src="./startup.js?v=drag-invert-1" crossorigin="anonymous"></script>
+  <script src="./startup.js?v=view-icon-1" crossorigin="anonymous"></script>
 </body>
 </html>

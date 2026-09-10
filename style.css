@@ -5,6 +5,14 @@
 #splash{animation:splash-timeout .9s ease 1s forwards}
 @keyframes splash-timeout{to{opacity:0;visibility:hidden}}
 
+/* Stable vector fullscreen icon; overrides the earlier CSS-drawn glyph. */
+.fullscreen{padding:3px 6px;background:none!important}
+.fullscreen:before,.fullscreen:after{content:none!important;display:none!important}
+.fullscreen svg{display:block;width:20px;height:18px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}
+.fullscreen .collapse-icon{display:none}
+.fullscreen.exit .expand-icon{display:none}
+.fullscreen.exit .collapse-icon{display:block}
+
 /* Keep the hologram inside its grid row so the data panel starts on a clean edge. */
 .app{grid-template-rows:74px minmax(0,68fr) minmax(0,32fr)}
 .workspace,.hologram,#viewport,.data-panel,.table-wrap{min-height:0}
