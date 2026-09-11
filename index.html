@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="基于立方点阵的交互式太阳系全息图" />
   <title>太阳系漫游指南 · Solar System Touring Guide</title>
-  <link rel="stylesheet" href="./style.css?v=ui-ice-top-1" />
+  <link rel="stylesheet" href="./style.css?v=spacing-100-1" />
 </head>
 <body>
   <div id="splash" aria-hidden="true"><div class="logo logo--large"></div></div>
@@ -18,16 +18,16 @@
     <section class="workspace">
       <aside class="controls">
         <h2>点阵控制 · LATTICE CONTROLS</h2>
-        <div class="control-row"><label for="density">立方网格密度<br><small>CUBIC GRID DENSITY</small></label><output id="densityValue">50 × 50 × 50</output></div>
-        <input id="density" type="range" min="30" max="50" value="50" aria-label="立方网格密度" />
+        <div class="control-row"><label for="density">立方网格密度<br><small>CUBIC GRID DENSITY</small></label><output id="densityValue">100 × 100 × 100</output></div>
+        <input id="density" type="range" min="30" max="100" value="100" aria-label="立方网格密度" />
         <div class="control-row"><label for="speed">时间压缩速度<br><small>TIME COMPRESSION</small></label><output id="speedValue">5 天/秒 · DAYS/S</output></div>
-        <input id="speed" type="range" min="0" max="5" value="0" aria-label="时间压缩速度" />
+        <input id="speed" type="range" min="0" max="4" value="0" aria-label="时间压缩速度" />
         <button id="pause" class="action-button"><svg class="control-icon" viewBox="0 0 16 16" aria-hidden="true"><path class="pause-icon" d="M5 3v10M11 3v10"/><path class="play-icon" d="M5 3l8 5-8 5z"/></svg><span id="pauseLabel" class="action-label">暂停公转 · PAUSE ORBITS</span></button>
         <button id="resetView" class="action-button"><svg class="control-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 6V2l-2 2.2A6 6 0 1 0 14 9"/></svg><span class="action-label">重置三维视角 · RESET VIEW</span></button>
         <button id="frontView" class="action-button"><svg class="control-icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10"/></svg><span class="action-label">正视图 · FRONT VIEW</span></button>
         <button id="topView" class="action-button"><svg class="control-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2l6 6-6 6-6-6z"/></svg><span class="action-label">顶视图 · TOP VIEW</span></button>
         <button id="resetPlanets" class="action-button"><svg class="control-icon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 6V2l-2 2.2A6 6 0 1 0 14 9"/></svg><span class="action-label">重置行星位置 · RESET PLANETS</span></button>
-        <div class="stat"><small>网格点 · GRID POINTS</small><strong id="pointCount">125,000</strong></div>
+        <div class="stat"><small>网格点 · GRID POINTS</small><strong id="pointCount">1,000,000</strong></div>
         <div class="info"><b>点阵规则 · LATTICE RULES</b><br>每个点位于立方网格交点。<br>Every point sits on the cubic grid.</div>
         <div class="info"><b>运动规则 · MOTION RULES</b><br>真实周期比例，压缩时间显示。<br>Real period ratios with compressed time.</div>
       </aside>
@@ -43,6 +43,6 @@
       <div class="table-wrap"><table><thead><tr><th>行星 · PLANET</th><th>轨道半长轴 · SEMI-MAJOR AXIS (AU)</th><th>公转周期 · PERIOD (DAYS)</th><th>公转周期 · PERIOD (EARTH YEARS)</th><th>平均轨道速度 · MEAN SPEED (km/s)</th><th>平均半径 · MEAN RADIUS (km)</th></tr></thead><tbody id="planetRows"></tbody></table></div>
     </section>
   </main>
-  <script src="./startup.js?v=ui-ice-top-1" crossorigin="anonymous"></script>
+  <script src="./startup.js?v=spacing-100-1" crossorigin="anonymous"></script>
 </body>
 </html>
