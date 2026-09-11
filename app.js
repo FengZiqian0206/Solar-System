@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=inner-compact-belt-1';
+import { THREE, context } from './renderer-support.js?v=inner-closer-belt-restored-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -21,7 +21,7 @@ function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a
 function bodyData(){
   const densityBodyScale=50/gridSize, sf=Math.sqrt(BODY_HALF/19)*densityBodyScale, maxAu=30.0611;
   const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20)*densityBodyScale,core:1,edge:.51}];
-  const compactInner=gridSize===100?[.64,.72,.80,.88]:[1,1,1,1];
+  const compactInner=gridSize===100?[.48,.58,.68,.78]:[1,1,1,1];
   for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:1,r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
 
@@ -30,8 +30,7 @@ attribute float aSeed; uniform float uTime,uHalf,uPixelRatio; uniform vec2 uView
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));
- float beltClump=hash(vec3(floor(position.x*.36),floor(position.z*.36),17.));float beltShift=(beltHash-.5)*uHalf*.08;float beltHeight=uHalf*(.05+beltClump*.18);float beltChance=.06+beltClump*.24;
- if(belt>=uHalf*.47+beltShift&&belt<=uHalf*.60+beltShift&&abs(position.y)<=beltHeight&&beltHash<beltChance) ratio=max(ratio,.43+beltClump*.20);
+ if(belt>=uHalf*.508&&belt<=uHalf*.560&&abs(position.y)<=max(1.,uHalf*.10)&&beltHash<.48) ratio=max(ratio,.46+beltHash*.17);
  for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
  vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.42+f*.22);}
  float sizeFactor=.82+aSeed*.36;if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
