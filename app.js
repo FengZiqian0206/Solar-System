@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=spacing-100-1';
+import { THREE, context } from './renderer-support.js?v=restore-50-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -11,40 +11,24 @@ const PLANETS = [
   ['海王星','Neptune',30.0611,60182,.0086,5.43,24622,2.05,1.77,2.35,.60,.34]
 ];
 const SPEEDS=[5,30,100,365.256,1000];
-// Freeze body radii at the former 50-cubed setting. AU spacing is compressed
-// for readability, with non-overlapping perihelion/aphelion envelopes.
-const BODY_SCALE=Math.sqrt(24.5/19), SUN_RADIUS=4.9;
-const ORBITS=[];
-let outerEdge=SUN_RADIUS;
-for(const p of PLANETS){
-  const extent=p[9]*BODY_SCALE*(p[1]==='Saturn'?2.08:1);
-  const gap=1.2+Math.log1p(p[2])*.65+(p[1]==='Jupiter'?3:0);
-  const axis=(outerEdge+gap+extent)/(1-p[4]);
-  ORBITS.push(axis);
-  outerEdge=axis*(1+p[4])+extent;
-}
-const CLOUD_HALF=outerEdge+3;
-const BELT_INNER=ORBITS[3]*(1+PLANETS[3][4])+PLANETS[3][9]*BODY_SCALE+.8;
-const BELT_OUTER=ORBITS[4]*(1-PLANETS[4][4])-PLANETS[4][9]*BODY_SCALE-.8;
-let viewDistance=CLOUD_HALF*3.2;
 const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
-let renderer,scene,camera,cloud,geometry,material,gridSize=100,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
+let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
 function bodyData(){
-  const sf=BODY_SCALE;
-  const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:SUN_RADIUS,core:1,edge:.51}];
-  for(const [index,p] of PLANETS.entries()){const r=ORBITS[index],a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
+  const half=(gridSize-1)/2, sf=Math.sqrt(half/19), maxAu=30.0611;
+  const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,half*.20),core:1,edge:.51}];
+  for(const p of PLANETS){const r=half*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55),a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
 
 const vertexShader=`
-attribute float aSeed; uniform float uTime,uHalf,uPixelRatio; uniform vec2 uViewport,uBelt; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective;
+attribute float aSeed; uniform float uTime,uHalf,uPixelRatio; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));
- if(belt>=uBelt.x&&belt<=uBelt.y&&abs(position.y)<=2.&&beltHash<.48) ratio=max(ratio,.46+beltHash*.17);
+ if(belt>=uHalf*.49&&belt<=uHalf*.54&&abs(position.y)<=max(1.,uHalf*.10)&&beltHash<.48) ratio=max(ratio,.46+beltHash*.17);
  for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
  vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=max(.90,sr*.24);if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.42+f*.22);}
  float sizeFactor=.82+aSeed*.36;if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
@@ -60,10 +44,10 @@ void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoot
 
 function rebuild(){
   if(cloud){scene.remove(cloud);geometry.dispose();material.dispose()}
-  const n=gridSize,count=n*n*n,half=CLOUD_HALF,step=2*half/(n-1),pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
-  for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
+  const n=gridSize,count=n*n*n,half=(n-1)/2,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
+  for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x-half;pos[q*3+1]=y-half;pos[q*3+2]=z-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
-  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uBelt:{value:new THREE.Vector2(BELT_INNER,BELT_OUTER)},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
+  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
   cloud=new THREE.Points(geometry,material);scene.add(cloud);updateBodies();$('#pointCount').textContent=count.toLocaleString();
 }
 function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge)});material.uniforms.uSaturn.value.copy(next[6].pos)}
@@ -73,10 +57,10 @@ function init(){
     const error=new Error([gl.getProgramInfoLog(program),gl.getShaderInfoLog(vertex),gl.getShaderInfoLog(fragment)].filter(Boolean).join('\n') || 'Shader compilation failed');
     error.code='SHADER_FAILED';throw error;
   };
-  renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=viewDistance;rebuild();resize();cloud.rotation.set(pitch,yaw,0);renderer.render(scene,camera);requestAnimationFrame(frame);
+  renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);renderer.render(scene,camera);requestAnimationFrame(frame);
 }
-function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;viewDistance=CLOUD_HALF*3.2/Math.min(1,camera.aspect);camera.far=Math.max(500,viewDistance*3);camera.position.z=viewDistance/zoom;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
-function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){simDays+=dt*daysPerSecond;updateBodies()}material.uniforms.uTime.value=now/1000;cloud.rotation.set(pitch,yaw,0);camera.position.z=viewDistance/zoom;renderer.render(scene,camera);updateLabels();$('#sceneInfo').textContent=`CUBIC LATTICE  ${gridSize}³   ·   ${(gridSize**3).toLocaleString()} POINTS   ·   ${(simDays/365.256).toFixed(2)} EARTH YEARS`;requestAnimationFrame(frame)}
+function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
+function frame(now){const dt=Math.min((now-last)/1000,.1);last=now;if(!paused){simDays+=dt*daysPerSecond;updateBodies()}material.uniforms.uTime.value=now/1000;cloud.rotation.set(pitch,yaw,0);camera.position.z=78/zoom;renderer.render(scene,camera);updateLabels();$('#sceneInfo').textContent=`CUBIC LATTICE  ${gridSize}³   ·   ${(gridSize**3).toLocaleString()} POINTS   ·   ${(simDays/365.256).toFixed(2)} EARTH YEARS`;requestAnimationFrame(frame)}
 function updateLabels(){
   labels.replaceChildren();leaders.replaceChildren();const rect=viewport.getBoundingClientRect(),w=rect.width,h=rect.height;
   bodies.forEach((b,i)=>{const v=b.pos.clone().applyEuler(cloud.rotation).project(camera);const x=(v.x*.5+.5)*w,y=(-v.y*.5+.5)*h,dir=x>=w/2?1:-1,vertical=i%2===0?-1:1,lineY=Math.max(12,Math.min(h-28,y+vertical*36)),elbow=x+dir*42,end=elbow+dir*115;const poly=document.createElementNS('http://www.w3.org/2000/svg','polyline');poly.setAttribute('points',`${x},${y} ${elbow},${lineY} ${end},${lineY}`);leaders.append(poly);const label=document.createElement('span');label.className='body-label';label.textContent=b.name;label.style.top=`${lineY}px`;label.style.left=dir>0?`${end+6}px`:`${end-6}px`;if(dir<0)label.style.transform='translate(-100%,-50%)';labels.append(label)})
