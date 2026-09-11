@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=inner-closer-zoom-1';
+import { THREE, context } from './renderer-support.js?v=dense-space-belt-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -26,18 +26,19 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed; uniform float uTime,uHalf,uPixelRatio; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective;
+attribute float aSeed; uniform float uTime,uHalf,uPixelRatio,uDenseMode; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
- float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));
- if(belt>=uHalf*.508&&belt<=uHalf*.560&&abs(position.y)<=max(1.,uHalf*.10)&&beltHash<.48) ratio=max(ratio,.46+beltHash*.17);
+ float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));
+ float beltShift=uDenseMode*(beltHash-.5)*uHalf*.035;float beltInner=mix(uHalf*.508,uHalf*.405,uDenseMode)+beltShift;float beltOuter=mix(uHalf*.560,uHalf*.485,uDenseMode)+beltShift;float beltHeight=max(1.,uHalf*mix(.10,.075+beltClump*.09,uDenseMode));float beltChance=mix(.48,.10+beltClump*.34,uDenseMode);
+ if(belt>=beltInner&&belt<=beltOuter&&abs(position.y)<=beltHeight&&beltHash<beltChance) ratio=max(ratio,mix(.46+beltHash*.17,.43+beltClump*.20,uDenseMode));
  for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
  vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.42+f*.22);}
  float sizeFactor=.82+aSeed*.36;if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);if(iceDepth>.12&&aSeed>.60)sizeFactor*=1.12+iceDepth*1.05;
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
- vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);if(vRatio<=.281)radius*=1.06;float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,17.);
+ vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);if(vRatio<=.281)radius*=mix(1.06,.72,uDenseMode);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,17.);
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio,vSeed,vPerspective;
@@ -49,7 +50,7 @@ function rebuild(){
   const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=2*half/(n-1),pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
-  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
+  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize===100?1:0},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
   cloud=new THREE.Points(geometry,material);scene.add(cloud);updateBodies();$('#pointCount').textContent=count.toLocaleString();
 }
 function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge)});material.uniforms.uSaturn.value.copy(next[6].pos)}
