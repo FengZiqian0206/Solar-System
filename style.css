@@ -12,6 +12,8 @@
 .fullscreen .collapse-icon{display:none}
 .fullscreen.exit .expand-icon{display:none}
 .fullscreen.exit .collapse-icon{display:block}
+.chart-actions .fullscreen{width:22px;height:18px;margin:0 0 0 10px;padding:0 2px}
+.chart-actions .fullscreen svg{width:18px;height:18px}
 
 /* Keep the hologram inside its grid row so the data panel starts on a clean edge. */
 .app{grid-template-rows:74px minmax(0,68fr) minmax(0,32fr)}

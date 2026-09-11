@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=view-icon-1';
+import { THREE, context } from './renderer-support.js?v=view-red-space-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -13,7 +13,7 @@ const PLANETS = [
 const SPEEDS=[5,30,100,365.256,1000,5000];
 const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
-let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=-Math.PI/4,zoom=1,drag=null;
+let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
@@ -34,12 +34,12 @@ void main(){
  float sizeFactor=.82+aSeed*.36;if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
- vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float radius=.38+pow(sizeTone,2.4)*10.6;if(vRatio<=.281)radius*=.72;float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,17.);
+ vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.12);if(vRatio<=.281)radius*=.84;float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,17.);
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio,vSeed,vPerspective;
 vec3 palette(float t){vec3 c[11];c[0]=vec3(.192,.212,.584);c[1]=vec3(.271,.459,.706);c[2]=vec3(.455,.678,.82);c[3]=vec3(.671,.851,.914);c[4]=vec3(.878,.953,.973);c[5]=vec3(1.,1.,.749);c[6]=vec3(.996,.878,.565);c[7]=vec3(.992,.682,.38);c[8]=vec3(.957,.427,.263);c[9]=vec3(.843,.188,.153);c[10]=vec3(.647,0.,.149);int i=int(min(10.,floor(t*11.)));if(i==0)return c[0];if(i==1)return c[1];if(i==2)return c[2];if(i==3)return c[3];if(i==4)return c[4];if(i==5)return c[5];if(i==6)return c[6];if(i==7)return c[7];if(i==8)return c[8];if(i==9)return c[9];return c[10];}
-void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade)*edge;gl_FragColor=vec4(palette(vRatio),alpha);}`;
+void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.14;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity)*edge;gl_FragColor=vec4(palette(vRatio),alpha);}`;
 
 function rebuild(){
   if(cloud){scene.remove(cloud);geometry.dispose();material.dispose()}
@@ -66,7 +66,7 @@ function updateLabels(){
 }
 function setView(y,p,z=1){yaw=y;pitch=p;zoom=z}
 viewport.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY};viewport.setPointerCapture(e.pointerId)});viewport.addEventListener('pointermove',e=>{if(!drag)return;yaw+=(e.clientX-drag.x)*.002;pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch+(e.clientY-drag.y)*.002));drag={x:e.clientX,y:e.clientY}});viewport.addEventListener('pointerup',()=>drag=null);viewport.addEventListener('pointercancel',()=>drag=null);viewport.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.52,Math.min(2.4,zoom*(e.deltaY<0?1.1:.9)))},{passive:false});
-$('#density').addEventListener('input',e=>{$('#densityValue').textContent=`${e.target.value} × ${e.target.value} × ${e.target.value}`});$('#density').addEventListener('change',e=>{gridSize=+e.target.value;rebuild()});$('#speed').addEventListener('input',e=>{daysPerSecond=SPEEDS[+e.target.value];$('#speedValue').textContent=`${daysPerSecond} 天/秒 · DAYS/S`});$('#pause').onclick=()=>{paused=!paused;$('#pause').innerHTML=paused?'▶&nbsp;&nbsp;继续公转 · RESUME ORBITS':'Ⅱ&nbsp;&nbsp;暂停公转 · PAUSE ORBITS';$('#status').textContent=paused?'● 已暂停 · PAUSED':'● 运行中 · RUNNING'};$('#resetView').onclick=()=>setView(Math.PI/4,-Math.PI/4);$('#frontView').onclick=()=>setView(0,0);$('#topView').onclick=()=>setView(0,-Math.PI/2);$('#resetPlanets').onclick=()=>{simDays=0;updateBodies()};
+$('#density').addEventListener('input',e=>{$('#densityValue').textContent=`${e.target.value} × ${e.target.value} × ${e.target.value}`});$('#density').addEventListener('change',e=>{gridSize=+e.target.value;rebuild()});$('#speed').addEventListener('input',e=>{daysPerSecond=SPEEDS[+e.target.value];$('#speedValue').textContent=`${daysPerSecond} 天/秒 · DAYS/S`});$('#pause').onclick=()=>{paused=!paused;$('#pause').innerHTML=paused?'▶&nbsp;&nbsp;继续公转 · RESUME ORBITS':'Ⅱ&nbsp;&nbsp;暂停公转 · PAUSE ORBITS';$('#status').textContent=paused?'● 已暂停 · PAUSED':'● 运行中 · RUNNING'};$('#resetView').onclick=()=>setView(Math.PI/4,Math.PI/4);$('#frontView').onclick=()=>setView(0,0);$('#topView').onclick=()=>setView(0,-Math.PI/2);$('#resetPlanets').onclick=()=>{simDays=0;updateBodies()};
 $('#fullscreen').onclick=async()=>{if(!document.fullscreenElement)await $('#hologram').requestFullscreen();else await document.exitFullscreen()};document.addEventListener('fullscreenchange',()=>$('#fullscreen').classList.toggle('exit',!!document.fullscreenElement));
 function rows(filter=''){const f=filter.trim().toLowerCase();$('#planetRows').innerHTML=PLANETS.filter(p=>!f||p[0].includes(f)||p[1].toLowerCase().includes(f)).map(p=>`<tr><td>${p[0]}&nbsp;&nbsp;${p[1]}</td><td>${p[2].toFixed(4)}</td><td>${p[3].toLocaleString(undefined,{maximumFractionDigits:3})}</td><td>${(p[3]/365.256).toFixed(3)}</td><td>${p[5].toFixed(2)}</td><td>${p[6].toLocaleString()}</td></tr>`).join('')}rows();$('#search').addEventListener('input',e=>rows(e.target.value));new ResizeObserver(resize).observe(viewport);
 init();
