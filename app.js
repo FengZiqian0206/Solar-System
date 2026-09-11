@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=restore-50-1';
+import { THREE, context } from './renderer-support.js?v=density-100-fixed-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -11,6 +11,7 @@ const PLANETS = [
   ['海王星','Neptune',30.0611,60182,.0086,5.43,24622,2.05,1.77,2.35,.60,.34]
 ];
 const SPEEDS=[5,30,100,365.256,1000];
+const VISUAL_HALF=24.5;
 const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
 let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
@@ -18,7 +19,7 @@ const bodies=[];
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
 function bodyData(){
-  const half=(gridSize-1)/2, sf=Math.sqrt(half/19), maxAu=30.0611;
+  const half=VISUAL_HALF, sf=Math.sqrt(half/19), maxAu=30.0611;
   const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,half*.20),core:1,edge:.51}];
   for(const p of PLANETS){const r=half*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55),a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
@@ -44,8 +45,8 @@ void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoot
 
 function rebuild(){
   if(cloud){scene.remove(cloud);geometry.dispose();material.dispose()}
-  const n=gridSize,count=n*n*n,half=(n-1)/2,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
-  for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x-half;pos[q*3+1]=y-half;pos[q*3+2]=z-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
+  const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=2*half/(n-1),pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
+  for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
   cloud=new THREE.Points(geometry,material);scene.add(cloud);updateBodies();$('#pointCount').textContent=count.toLocaleString();
