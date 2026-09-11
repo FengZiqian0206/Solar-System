@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=orbit-spacing-1';
+import { THREE, context } from './renderer-support.js?v=density-50-default-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -14,7 +14,7 @@ const SPEEDS=[5,30,100,365.256,1000];
 const VISUAL_HALF=26, BODY_HALF=24.5, ORBIT_SCALE=1.10;
 const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
-let renderer,scene,camera,cloud,geometry,material,gridSize=100,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
+let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
