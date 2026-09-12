@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=clean-body-grid-1';
+import { THREE, context } from './renderer-support.js?v=compact-body-grid-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -17,30 +17,32 @@ const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders
 let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
 let detailCloud,detailGeometry;
-const DETAIL_STEP=2*VISUAL_HALF/49, DETAIL_CAPACITY=16000;
+const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=BODY_STEP_50/2, DETAIL_CAPACITY=16000;
 
-// Refine only celestial volumes on a fixed global lattice; retain the small bodies.
+// Pack dense-mode bodies into adjacent fine-grid cells; every position stays on the global lattice.
 function updateBodyDetails(){
   if(!detailGeometry)return;
   const positions=detailGeometry.attributes.position.array,seeds=detailGeometry.attributes.aSeed.array;
+  const bodyStep=BODY_STEP_100;
   let count=0;
   for(const b of bodies){
-    const lo=['x','y','z'].map(axis=>Math.ceil((b.pos[axis]-b.radius+VISUAL_HALF)/DETAIL_STEP));
-    const hi=['x','y','z'].map(axis=>Math.floor((b.pos[axis]+b.radius+VISUAL_HALF)/DETAIL_STEP));
+    const lo=['x','y','z'].map(axis=>Math.ceil((b.pos[axis]-b.radius+VISUAL_HALF)/bodyStep));
+    const hi=['x','y','z'].map(axis=>Math.floor((b.pos[axis]+b.radius+VISUAL_HALF)/bodyStep));
     for(let x=lo[0];x<=hi[0];x++)for(let y=lo[1];y<=hi[1];y++)for(let z=lo[2];z<=hi[2];z++){
-      const px=x*DETAIL_STEP-VISUAL_HALF,py=y*DETAIL_STEP-VISUAL_HALF,pz=z*DETAIL_STEP-VISUAL_HALF;
+      const px=x*bodyStep-VISUAL_HALF,py=y*bodyStep-VISUAL_HALF,pz=z*bodyStep-VISUAL_HALF;
       if((px-b.pos.x)**2+(py-b.pos.y)**2+(pz-b.pos.z)**2>=b.radius*b.radius)continue;
       if(count>=DETAIL_CAPACITY)throw new Error('Body detail capacity exceeded');
       positions[count*3]=px;positions[count*3+1]=py;positions[count*3+2]=pz;
       seeds[count]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;count++;
     }
   }
-  // Reuse the same 50³ global lattice for Saturn's ring as well.
+  // Compact Saturn's ring onto adjacent 100³ cells together with the planet.
   const saturn=bodies[6],sr=saturn.radius,ro=sr*2.08,rt=sr*.324;
-  const lo=['x','y','z'].map(axis=>Math.ceil((saturn.pos[axis]-(axis==='x'?ro:ro+rt)+VISUAL_HALF)/DETAIL_STEP));
-  const hi=['x','y','z'].map(axis=>Math.floor((saturn.pos[axis]+(axis==='x'?ro:ro+rt)+VISUAL_HALF)/DETAIL_STEP));
+  const ringStep=BODY_STEP_100;
+  const lo=['x','y','z'].map(axis=>Math.ceil((saturn.pos[axis]-(axis==='x'?ro:ro+rt)+VISUAL_HALF)/ringStep));
+  const hi=['x','y','z'].map(axis=>Math.floor((saturn.pos[axis]+(axis==='x'?ro:ro+rt)+VISUAL_HALF)/ringStep));
   for(let x=lo[0];x<=hi[0];x++)for(let y=lo[1];y<=hi[1];y++)for(let z=lo[2];z<=hi[2];z++){
-    const px=x*DETAIL_STEP-VISUAL_HALF,py=y*DETAIL_STEP-VISUAL_HALF,pz=z*DETAIL_STEP-VISUAL_HALF;
+    const px=x*ringStep-VISUAL_HALF,py=y*ringStep-VISUAL_HALF,pz=z*ringStep-VISUAL_HALF;
     const sx=px-saturn.pos.x,sy=py-saturn.pos.y,sz=pz-saturn.pos.z;
     const ringY=sy*.894-sz*.448,ringZ=sy*.448+sz*.894,rr=Math.hypot(sx,ringZ);
     if(rr<=sr*1.25||rr>=ro||Math.abs(ringY)>=rt)continue;
@@ -50,10 +52,10 @@ function updateBodyDetails(){
   }
   // Supply the complete 50³ asteroid-belt volume; the shader keeps its seeded subset.
   const beltInner=VISUAL_HALF*.508,beltOuter=VISUAL_HALF*.560,beltHeight=Math.max(1,VISUAL_HALF*.10);
-  const beltLoX=Math.ceil((-beltOuter+VISUAL_HALF)/DETAIL_STEP),beltHiX=Math.floor((beltOuter+VISUAL_HALF)/DETAIL_STEP);
-  const beltLoY=Math.ceil((-beltHeight+VISUAL_HALF)/DETAIL_STEP),beltHiY=Math.floor((beltHeight+VISUAL_HALF)/DETAIL_STEP);
+  const beltLoX=Math.ceil((-beltOuter+VISUAL_HALF)/BODY_STEP_50),beltHiX=Math.floor((beltOuter+VISUAL_HALF)/BODY_STEP_50);
+  const beltLoY=Math.ceil((-beltHeight+VISUAL_HALF)/BODY_STEP_50),beltHiY=Math.floor((beltHeight+VISUAL_HALF)/BODY_STEP_50);
   for(let x=beltLoX;x<=beltHiX;x++)for(let y=beltLoY;y<=beltHiY;y++)for(let z=beltLoX;z<=beltHiX;z++){
-    const px=x*DETAIL_STEP-VISUAL_HALF,py=y*DETAIL_STEP-VISUAL_HALF,pz=z*DETAIL_STEP-VISUAL_HALF,br=Math.hypot(px,pz);
+    const px=x*BODY_STEP_50-VISUAL_HALF,py=y*BODY_STEP_50-VISUAL_HALF,pz=z*BODY_STEP_50-VISUAL_HALF,br=Math.hypot(px,pz);
     if(br<beltInner||br>beltOuter)continue;
     if(bodies.some(b=>(px-b.pos.x)**2+(py-b.pos.y)**2+(pz-b.pos.z)**2<b.radius*b.radius))continue;
     const sx=px-saturn.pos.x,sy=py-saturn.pos.y,sz=pz-saturn.pos.z;
@@ -69,8 +71,8 @@ function updateBodyDetails(){
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
 function bodyData(){
-  const sf=Math.sqrt(BODY_HALF/19), maxAu=30.0611;
-  const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20),core:1,edge:.51}];
+  const bodyScale=gridSize===100?.5:1,sf=Math.sqrt(BODY_HALF/19)*bodyScale, maxAu=30.0611;
+  const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20)*bodyScale,core:1,edge:.51}];
   const compactInner=[.90,.90,.90,.90];
   for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:1,r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
@@ -83,8 +85,7 @@ void main(){
  float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));float beltPoint=0.,beltEnabled=1.-uDenseMode*(1.-aDetail);
  float beltShift=visualDense*(beltHash-.5)*uHalf*.012;float beltInner=mix(uHalf*.508,uHalf*.390,visualDense)+beltShift;float beltOuter=mix(uHalf*.560,uHalf*.500,visualDense)+beltShift;float beltHeight=max(1.,uHalf*mix(.10,.035+beltClump*.020,visualDense));float beltChance=mix(.48,.30+beltClump*.12,visualDense);
  if(beltEnabled>.5&&belt>=beltInner&&belt<=beltOuter&&abs(position.y)<=beltHeight&&beltHash<beltChance){ratio=max(ratio,mix(.46+beltHash*.17,.44+beltHash*.17,visualDense));beltPoint=1.;}
- vec3 viewAxis=normalize(vec3(modelViewMatrix[0][2],modelViewMatrix[1][2],modelViewMatrix[2][2]));
- float bodyDepth=0.,bodyScreenMask=0.;for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);float axial=dot(d,viewAxis);float screenDist=length(d-viewAxis*axial);if(screenDist<uBodies[i].w*1.08)bodyScreenMask=1.;if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;bodyDepth=max(bodyDepth,inward);ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
+ float bodyDepth=0.;for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;bodyDepth=max(bodyDepth,inward);ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
  vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324,ringPoint=0.;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.42+f*.22);ringPoint=1.;}
  float sizeFactor=.82+aSeed*.36;if(bodyDepth>0.)sizeFactor*=mix(1.,.34+pow(bodyDepth,.50)*2.76,visualDense);if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);if(iceDepth>.12&&aSeed>.60)sizeFactor*=1.12+iceDepth*1.05;
@@ -92,7 +93,7 @@ void main(){
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
  vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);if(vRatio<=.281)radius*=mix(1.06,.52,visualDense);if(beltPoint>.5)radius*=mix(1.,.72,visualDense);float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,mix(17.,34.,visualDense));
  // In 100³ mode, dense-grid body/ring points are replaced by an exact 50³ celestial layer.
- vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyScreenMask>.5||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;
+ vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth;
@@ -102,7 +103,7 @@ void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)disc
 function rebuild(){
   if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
   if(cloud){scene.remove(cloud);geometry.dispose();material.dispose()}
-  const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===100?DETAIL_STEP/2:DETAIL_STEP,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
+  const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===100?BODY_STEP_100:BODY_STEP_50,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize===100?1:0},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
