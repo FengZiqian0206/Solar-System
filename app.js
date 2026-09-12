@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=dense-detail-1';
+import { THREE, context } from './renderer-support.js?v=dense-detail-2';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -66,15 +66,15 @@ void main(){
  if(uDenseMode>.5&&bodyDepth>0.){
    if(aDetail<.5)vVisible=0.;
    float spacing=(52./99./2.)*projectionMatrix[1][1]*uViewport.y*.5*uPixelRatio/depth;
-   float radialSize=.72+5.8*pow(bodyDepth,.9);
-   float fill=.38+.58*pow(bodyDepth,.65);
-   gl_PointSize=max(.55,min(radialSize*uPixelRatio*perspectiveScale,spacing*fill));
+   float radialSize=1.05+8.4*pow(bodyDepth,.82);
+   float fill=.70+.90*pow(bodyDepth,.65);
+   gl_PointSize=max(.9,min(radialSize*uPixelRatio*perspectiveScale,spacing*fill));
  }
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth;
 vec3 palette(float t){vec3 c[11];c[0]=vec3(.192,.212,.584);c[1]=vec3(.271,.459,.706);c[2]=vec3(.455,.678,.82);c[3]=vec3(.671,.851,.914);c[4]=vec3(.878,.953,.973);c[5]=vec3(1.,1.,.749);c[6]=vec3(.996,.878,.565);c[7]=vec3(.992,.682,.38);c[8]=vec3(.957,.427,.263);c[9]=vec3(.843,.188,.153);c[10]=vec3(.647,0.,.149);int i=int(min(10.,floor(t*11.)));if(i==0)return c[0];if(i==1)return c[1];if(i==2)return c[2];if(i==3)return c[3];if(i==4)return c[4];if(i==5)return c[5];if(i==6)return c[6];if(i==7)return c[7];if(i==8)return c[8];if(i==9)return c[9];return c[10];}
-void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;if(vBodyDepth>0.)alpha=max(alpha,(.12+.58*pow(vBodyDepth,.85))*edge);gl_FragColor=vec4(palette(vRatio),alpha);}`;
+void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);gl_FragColor=vec4(palette(vRatio),alpha);}`;
 
 function rebuild(){
   if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
