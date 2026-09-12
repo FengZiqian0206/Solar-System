@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=dense-body-depth-3';
+import { THREE, context } from './renderer-support.js?v=dense-detail-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -16,6 +16,28 @@ const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
 let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
+let detailCloud,detailGeometry;
+const DETAIL_STEP=2*VISUAL_HALF/99/2, DETAIL_CAPACITY=16000;
+
+// Refine only celestial volumes on a fixed global lattice; retain the small bodies.
+function updateBodyDetails(){
+  if(!detailGeometry)return;
+  const positions=detailGeometry.attributes.position.array,seeds=detailGeometry.attributes.aSeed.array;
+  let count=0;
+  for(const b of bodies){
+    const lo=['x','y','z'].map(axis=>Math.ceil((b.pos[axis]-b.radius+VISUAL_HALF)/DETAIL_STEP));
+    const hi=['x','y','z'].map(axis=>Math.floor((b.pos[axis]+b.radius+VISUAL_HALF)/DETAIL_STEP));
+    for(let x=lo[0];x<=hi[0];x++)for(let y=lo[1];y<=hi[1];y++)for(let z=lo[2];z<=hi[2];z++){
+      const px=x*DETAIL_STEP-VISUAL_HALF,py=y*DETAIL_STEP-VISUAL_HALF,pz=z*DETAIL_STEP-VISUAL_HALF;
+      if((px-b.pos.x)**2+(py-b.pos.y)**2+(pz-b.pos.z)**2>=b.radius*b.radius)continue;
+      if(count>=DETAIL_CAPACITY)throw new Error('Body detail capacity exceeded');
+      positions[count*3]=px;positions[count*3+1]=py;positions[count*3+2]=pz;
+      seeds[count]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;count++;
+    }
+  }
+  detailGeometry.setDrawRange(0,count);
+  detailGeometry.attributes.position.needsUpdate=true;detailGeometry.attributes.aSeed.needsUpdate=true;
+}
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
 function bodyData(){
@@ -26,7 +48,7 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed; uniform float uTime,uHalf,uPixelRatio,uDenseMode; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective;
+attribute float aSeed,aDetail; uniform float uTime,uHalf,uPixelRatio,uDenseMode; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));float beltPoint=0.;
@@ -39,21 +61,40 @@ void main(){
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
  vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);if(vRatio<=.281)radius*=mix(1.06,.52,uDenseMode);if(beltPoint>.5)radius*=mix(1.,.72,uDenseMode);float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,uDenseMode);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,mix(17.,34.,uDenseMode));
+ // Dense body detail has its own monotonic sizing, limited by projected grid spacing.
+ vVisible=1.;vBodyDepth=uDenseMode*bodyDepth;
+ if(uDenseMode>.5&&bodyDepth>0.){
+   if(aDetail<.5)vVisible=0.;
+   float spacing=(52./99./2.)*projectionMatrix[1][1]*uViewport.y*.5*uPixelRatio/depth;
+   float radialSize=.72+5.8*pow(bodyDepth,.9);
+   float fill=.38+.58*pow(bodyDepth,.65);
+   gl_PointSize=max(.55,min(radialSize*uPixelRatio*perspectiveScale,spacing*fill));
+ }
 }`;
 const fragmentShader=`
-precision highp float;varying float vRatio,vSeed,vPerspective;
+precision highp float;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth;
 vec3 palette(float t){vec3 c[11];c[0]=vec3(.192,.212,.584);c[1]=vec3(.271,.459,.706);c[2]=vec3(.455,.678,.82);c[3]=vec3(.671,.851,.914);c[4]=vec3(.878,.953,.973);c[5]=vec3(1.,1.,.749);c[6]=vec3(.996,.878,.565);c[7]=vec3(.992,.682,.38);c[8]=vec3(.957,.427,.263);c[9]=vec3(.843,.188,.153);c[10]=vec3(.647,0.,.149);int i=int(min(10.,floor(t*11.)));if(i==0)return c[0];if(i==1)return c[1];if(i==2)return c[2];if(i==3)return c[3];if(i==4)return c[4];if(i==5)return c[5];if(i==6)return c[6];if(i==7)return c[7];if(i==8)return c[8];if(i==9)return c[9];return c[10];}
-void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;gl_FragColor=vec4(palette(vRatio),alpha);}`;
+void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;if(vBodyDepth>0.)alpha=max(alpha,(.12+.58*pow(vBodyDepth,.85))*edge);gl_FragColor=vec4(palette(vRatio),alpha);}`;
 
 function rebuild(){
+  if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
   if(cloud){scene.remove(cloud);geometry.dispose();material.dispose()}
   const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=2*half/(n-1),pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize===100?1:0},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
-  cloud=new THREE.Points(geometry,material);scene.add(cloud);updateBodies();$('#pointCount').textContent=count.toLocaleString();
+  material.defaultAttributeValues.aDetail=[0];
+  cloud=new THREE.Points(geometry,material);scene.add(cloud);
+  if(gridSize===100){
+    detailGeometry=new THREE.BufferGeometry();
+    detailGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(DETAIL_CAPACITY*3),3).setUsage(THREE.DynamicDrawUsage));
+    detailGeometry.setAttribute('aSeed',new THREE.BufferAttribute(new Float32Array(DETAIL_CAPACITY),1).setUsage(THREE.DynamicDrawUsage));
+    detailGeometry.setAttribute('aDetail',new THREE.BufferAttribute(new Float32Array(DETAIL_CAPACITY).fill(1),1));
+    detailCloud=new THREE.Points(detailGeometry,material);detailCloud.frustumCulled=false;cloud.add(detailCloud);
+  }
+  updateBodies();$('#pointCount').textContent=count.toLocaleString();
 }
-function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge)});material.uniforms.uSaturn.value.copy(next[6].pos)}
+function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge)});material.uniforms.uSaturn.value.copy(next[6].pos);updateBodyDetails()}
 function init(){
   renderer=new THREE.WebGLRenderer({canvas,context,antialias:true,alpha:false,powerPreference:'default'});
   renderer.debug.onShaderError=(gl,program,vertex,fragment)=>{
