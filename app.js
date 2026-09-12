@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=speed-10-1';
+import { THREE, context } from './renderer-support.js?v=breathing-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -88,7 +88,7 @@ void main(){
  if(beltEnabled>.5&&belt>=beltInner&&belt<=beltOuter&&abs(position.y)<=beltHeight&&beltHash<beltChance){ratio=max(ratio,mix(.46+beltHash*.17,.44+beltHash*.17,visualDense));beltPoint=1.;}
  float bodyDepth=0.;for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;bodyDepth=max(bodyDepth,inward);ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
  vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324,ringPoint=0.;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.42+f*.22);ringPoint=1.;}
- float sizeFactor=.82+aSeed*.36;if(bodyDepth>0.)sizeFactor*=mix(1.,.24+2.16*pow(bodyDepth,.72),compactLayer);if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
+ float sizeFactor=.82+aSeed*.36;if(bodyDepth>0.)sizeFactor*=mix(1.,.24+2.16*pow(bodyDepth,.72),compactLayer);if(ratio<=.281)sizeFactor*=1.+.28*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);if(iceDepth>.12&&aSeed>.60)sizeFactor*=1.12+iceDepth*1.05;
  float meteorPeriod=3.6,meteorDuration=1.9,cycle=floor(uTime/meteorPeriod),age=mod(uTime,meteorPeriod)-(.25+hash(vec3(cycle,7.,11.))*.55),meteorOn=step(0.,age)*step(age,meteorDuration);
  float meteorAngle=hash(vec3(cycle,17.,3.))*6.28318,meteorLift=(hash(vec3(cycle,23.,5.))-.5)*.8;vec3 meteorDir=normalize(vec3(cos(meteorAngle),meteorLift,sin(meteorAngle)));vec3 meteorSide=normalize(vec3(-meteorDir.z,0.,meteorDir.x)),meteorUp=normalize(cross(meteorSide,meteorDir));
