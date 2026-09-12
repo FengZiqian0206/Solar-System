@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=compact-orbits-2';
+import { THREE, context } from './renderer-support.js?v=density-150-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -17,13 +17,13 @@ const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders
 let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
 let detailCloud,detailGeometry;
-const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=BODY_STEP_50/2, DETAIL_CAPACITY=16000;
+const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=BODY_STEP_50/2, BODY_STEP_150=BODY_STEP_50/3, DETAIL_CAPACITY=16000;
 
 // Pack dense-mode bodies into adjacent fine-grid cells; every position stays on the global lattice.
 function updateBodyDetails(){
   if(!detailGeometry)return;
   const positions=detailGeometry.attributes.position.array,seeds=detailGeometry.attributes.aSeed.array;
-  const bodyStep=BODY_STEP_100;
+  const bodyStep=gridSize===150?BODY_STEP_150:BODY_STEP_100;
   let count=0;
   for(const b of bodies){
     const lo=['x','y','z'].map(axis=>Math.ceil((b.pos[axis]-b.radius+VISUAL_HALF)/bodyStep));
@@ -36,9 +36,9 @@ function updateBodyDetails(){
       seeds[count]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;count++;
     }
   }
-  // Compact Saturn's ring onto adjacent 100³ cells together with the planet.
+  // Compact Saturn's ring onto adjacent dense-grid cells together with the planet.
   const saturn=bodies[6],sr=saturn.radius,ro=sr*2.08,rt=sr*.324;
-  const ringStep=BODY_STEP_100;
+  const ringStep=gridSize===150?BODY_STEP_150:BODY_STEP_100;
   const lo=['x','y','z'].map(axis=>Math.ceil((saturn.pos[axis]-(axis==='x'?ro:ro+rt)+VISUAL_HALF)/ringStep));
   const hi=['x','y','z'].map(axis=>Math.floor((saturn.pos[axis]+(axis==='x'?ro:ro+rt)+VISUAL_HALF)/ringStep));
   for(let x=lo[0];x<=hi[0];x++)for(let y=lo[1];y<=hi[1];y++)for(let z=lo[2];z<=hi[2];z++){
@@ -71,14 +71,14 @@ function updateBodyDetails(){
 
 function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a)-m)/(1-e*Math.cos(a));return a}
 function bodyData(){
-  const bodyScale=gridSize===100?.5:1,sf=Math.sqrt(BODY_HALF/19)*bodyScale, maxAu=30.0611;
+  const bodyScale=gridSize===50?1:50/gridSize,sf=Math.sqrt(BODY_HALF/19)*bodyScale, maxAu=30.0611;
   const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20)*bodyScale,core:1,edge:.51}];
-  const compactInner=gridSize===100?[.42,.50,.58,.66]:[.90,.90,.90,.90];
-  for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:(gridSize===100&&index===4?.82:1),r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
+  const compactInner=gridSize>50?[.42,.50,.58,.66]:[.90,.90,.90,.90];
+  for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:(gridSize>50&&index===4?.82:1),r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail; uniform float uTime,uHalf,uPixelRatio,uDenseMode; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth;
+attribute float aSeed,aDetail; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
@@ -92,8 +92,8 @@ void main(){
  float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);if(iceDepth>.12&&aSeed>.60)sizeFactor*=1.12+iceDepth*1.05;
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
- vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);if(vRatio<=.281)radius*=mix(1.06,.52,visualDense);if(beltPoint>.5)radius*=mix(1.,.72,visualDense);float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,mix(17.,34.,visualDense));
- // In 100³ mode, dense-grid body/ring points are replaced by an exact 50³ celestial layer.
+ vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);if(vRatio<=.281)radius*=mix(1.06,.52,visualDense)*uSpaceScale;if(beltPoint>.5)radius*=mix(1.,.72,visualDense);float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale,.35,mix(17.,34.,visualDense));
+ // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;
 }`;
 const fragmentShader=`
@@ -104,13 +104,13 @@ void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)disc
 function rebuild(){
   if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
   if(cloud){scene.remove(cloud);geometry.dispose();material.dispose()}
-  const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===100?BODY_STEP_100:BODY_STEP_50,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
+  const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===150?BODY_STEP_150:n===100?BODY_STEP_100:BODY_STEP_50,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
-  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize===100?1:0},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
+  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:gridSize===150?2/3:1},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()}}});
   material.defaultAttributeValues.aDetail=[0];
   cloud=new THREE.Points(geometry,material);scene.add(cloud);
-  if(gridSize===100){
+  if(gridSize>50){
     detailGeometry=new THREE.BufferGeometry();
     detailGeometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array(DETAIL_CAPACITY*3),3).setUsage(THREE.DynamicDrawUsage));
     detailGeometry.setAttribute('aSeed',new THREE.BufferAttribute(new Float32Array(DETAIL_CAPACITY),1).setUsage(THREE.DynamicDrawUsage));
