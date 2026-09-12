@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=compact-orbits-1';
+import { THREE, context } from './renderer-support.js?v=compact-orbits-2';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -51,7 +51,7 @@ function updateBodyDetails(){
     seeds[count]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;count++;
   }
   // Supply the complete 50³ asteroid-belt volume; the shader keeps its seeded subset.
-  const beltInner=VISUAL_HALF*.400,beltOuter=VISUAL_HALF*.452,beltHeight=Math.max(1,VISUAL_HALF*.10);
+  const beltInner=VISUAL_HALF*.340,beltOuter=VISUAL_HALF*.392,beltHeight=Math.max(1,VISUAL_HALF*.10);
   const beltLoX=Math.ceil((-beltOuter+VISUAL_HALF)/BODY_STEP_50),beltHiX=Math.floor((beltOuter+VISUAL_HALF)/BODY_STEP_50);
   const beltLoY=Math.ceil((-beltHeight+VISUAL_HALF)/BODY_STEP_50),beltHiY=Math.floor((beltHeight+VISUAL_HALF)/BODY_STEP_50);
   for(let x=beltLoX;x<=beltHiX;x++)for(let y=beltLoY;y<=beltHiY;y++)for(let z=beltLoX;z<=beltHiX;z++){
@@ -73,8 +73,8 @@ function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a
 function bodyData(){
   const bodyScale=gridSize===100?.5:1,sf=Math.sqrt(BODY_HALF/19)*bodyScale, maxAu=30.0611;
   const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20)*bodyScale,core:1,edge:.51}];
-  const compactInner=gridSize===100?[.50,.58,.66,.74]:[.90,.90,.90,.90];
-  for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:1,r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
+  const compactInner=gridSize===100?[.42,.50,.58,.66]:[.90,.90,.90,.90];
+  for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:(gridSize===100&&index===4?.82:1),r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
 
 const vertexShader=`
@@ -84,11 +84,11 @@ void main(){
  float visualDense=uDenseMode*(1.-aDetail);
  float compactLayer=uDenseMode*aDetail;
  float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));float beltPoint=0.,beltEnabled=1.-uDenseMode*(1.-aDetail);
- float beltShift=visualDense*(beltHash-.5)*uHalf*.012;float beltInner=uHalf*mix(.508,.400,compactLayer);float beltOuter=uHalf*mix(.560,.452,compactLayer);float beltHeight=max(1.,uHalf*mix(.10,.035+beltClump*.020,visualDense));float beltChance=mix(.48,.30+beltClump*.12,visualDense);
+ float beltShift=visualDense*(beltHash-.5)*uHalf*.012;float beltInner=uHalf*mix(.508,.340,compactLayer);float beltOuter=uHalf*mix(.560,.392,compactLayer);float beltHeight=max(1.,uHalf*mix(.10,.035+beltClump*.020,visualDense));float beltChance=mix(.48,.30+beltClump*.12,visualDense);
  if(beltEnabled>.5&&belt>=beltInner&&belt<=beltOuter&&abs(position.y)<=beltHeight&&beltHash<beltChance){ratio=max(ratio,mix(.46+beltHash*.17,.44+beltHash*.17,visualDense));beltPoint=1.;}
  float bodyDepth=0.;for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;bodyDepth=max(bodyDepth,inward);ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}}
  vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324,ringPoint=0.;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.42+f*.22);ringPoint=1.;}
- float sizeFactor=.82+aSeed*.36;if(bodyDepth>0.)sizeFactor*=mix(1.,.38+1.62*pow(bodyDepth,.65),compactLayer);if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
+ float sizeFactor=.82+aSeed*.36;if(bodyDepth>0.)sizeFactor*=mix(1.,.24+2.16*pow(bodyDepth,.72),compactLayer);if(ratio<=.281)sizeFactor*=1.+.16*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
  float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);if(iceDepth>.12&&aSeed>.60)sizeFactor*=1.12+iceDepth*1.05;
  float cycle=floor(uTime/7.),age=mod(uTime,7.)-(1.+hash(vec3(cycle,7.,11.))*2.),meteorOn=step(0.,age)*step(age,2.4),mx=uHalf*(-.8+age/2.4*1.6),my=uHalf*(.38+hash(vec3(cycle,17.,3.))*.35)-age*uHalf*.15,mz=uHalf*(-.65+hash(vec3(cycle,23.,5.))*1.3),behind=mx-position.x;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<uHalf*.4){float dy=position.y-(my+behind*.225),dz=position.z-mz,d2=dy*dy+dz*dz;if(d2<2.6){float intensity=sin(3.14159*age/2.4)*pow(1.-behind/(uHalf*.4),1.3)*(1.-d2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}}
