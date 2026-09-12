@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=meteor-orbits-1';
+import { THREE, context } from './renderer-support.js?v=speed-10-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -10,11 +10,11 @@ const PLANETS = [
   ['天王星','Uranus',19.1914,30688.5,.0472,6.81,25362,.85,.773,2.45,.65,.38],
   ['海王星','Neptune',30.0611,60182,.0086,5.43,24622,2.05,1.77,2.35,.60,.34]
 ];
-const SPEEDS=[5,30,100,365.256,1000];
+const SPEEDS=[10,30,100,365.256,1000];
 const VISUAL_HALF=26, BODY_HALF=24.5, ORBIT_SCALE=1.10;
 const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
-let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=5,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
+let renderer,scene,camera,cloud,geometry,material,gridSize=50,simDays=0,daysPerSecond=10,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null;
 const bodies=[];
 let detailCloud,detailGeometry;
 const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=BODY_STEP_50/2, BODY_STEP_150=BODY_STEP_50/3, DETAIL_CAPACITY=16000;
@@ -73,7 +73,7 @@ function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a
 function bodyData(){
   const bodyScale=gridSize===50?1:50/gridSize,sf=Math.sqrt(BODY_HALF/19)*bodyScale, maxAu=30.0611;
   const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20)*bodyScale,core:1,edge:.51}];
-  const compactInner=gridSize>50?[.38,.46,.54,.62]:[.90,.90,.90,.90];
+  const compactInner=gridSize===150?[.34,.42,.50,.58]:gridSize===100?[.38,.46,.54,.62]:[.90,.90,.90,.90];
   for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:(gridSize>50&&index===4?.82:1),r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
 
