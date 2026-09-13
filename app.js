@@ -1,4 +1,4 @@
-import { THREE, context } from './renderer-support.js?v=follow-scale-5b';
+import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -52,7 +52,7 @@ function updateBodyDetails(){
     seeds[count]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;count++;
   }
   // Supply the complete 50³ asteroid-belt volume; the shader keeps its seeded subset.
-  const beltInner=VISUAL_HALF*.300,beltOuter=VISUAL_HALF*.352,beltHeight=Math.max(1,VISUAL_HALF*.10);
+  const beltInner=VISUAL_HALF*.265,beltOuter=VISUAL_HALF*.320,beltHeight=Math.max(1,VISUAL_HALF*.10);
   const beltLoX=Math.ceil((-beltOuter+VISUAL_HALF)/BODY_STEP_50),beltHiX=Math.floor((beltOuter+VISUAL_HALF)/BODY_STEP_50);
   const beltLoY=Math.ceil((-beltHeight+VISUAL_HALF)/BODY_STEP_50),beltHiY=Math.floor((beltHeight+VISUAL_HALF)/BODY_STEP_50);
   for(let x=beltLoX;x<=beltHiX;x++)for(let y=beltLoY;y<=beltHiY;y++)for(let z=beltLoX;z<=beltHiX;z++){
@@ -74,7 +74,7 @@ function solveE(m,e){m%=Math.PI*2;let a=m;for(let i=0;i<7;i++)a-=(a-e*Math.sin(a
 function bodyData(){
   const bodyScale=gridSize===50?1:50/gridSize,sf=Math.sqrt(BODY_HALF/19)*bodyScale, maxAu=30.0611;
   const out=[{name:'太阳 · SUN',pos:new THREE.Vector3(),radius:Math.max(4,BODY_HALF*.20)*bodyScale,core:1,edge:.51}];
-  const compactInner=gridSize===150?[.34,.42,.50,.58]:gridSize===100?[.38,.46,.54,.62]:[.90,.90,.90,.90];
+  const compactInner=gridSize===150?[.29,.36,.43,.50]:gridSize===100?[.33,.40,.47,.54]:[.80,.82,.84,.86];
   for(const [index,p] of PLANETS.entries()){const orbitScale=index<4?compactInner[index]:(gridSize>50&&index===4?.82:1),r=BODY_HALF*(.29+Math.log10(p[2]+1)/Math.log10(maxAu+1)*.55)*ORBIT_SCALE*orbitScale,a=solveE(p[7]+simDays/p[3]*Math.PI*2,p[4]),x=r*(Math.cos(a)-p[4]),pz=r*Math.sqrt(1-p[4]*p[4])*Math.sin(a),inc=p[8]*Math.PI/180;out.push({name:`${p[0]} · ${p[1].toUpperCase()}`,pos:new THREE.Vector3(x,pz*Math.sin(inc),pz*Math.cos(inc)),radius:p[9]*sf,core:p[10],edge:p[11]})}return out;
 }
 
@@ -85,24 +85,24 @@ void main(){
  float visualDense=uDenseMode*(1.-aDetail);
  float compactLayer=uDenseMode*aDetail;
  float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));float beltPoint=0.,beltEnabled=1.-uDenseMode*(1.-aDetail);
- float beltShift=visualDense*(beltHash-.5)*uHalf*.012;float beltInner=uHalf*mix(.508,.300,compactLayer);float beltOuter=uHalf*mix(.560,.352,compactLayer);float beltHeight=max(1.,uHalf*mix(.10,.035+beltClump*.020,visualDense));float beltChance=mix(.48,.30+beltClump*.12,visualDense);
+ float beltShift=visualDense*(beltHash-.5)*uHalf*.012;float beltInner=uHalf*mix(.455,.265,compactLayer);float beltOuter=uHalf*mix(.515,.320,compactLayer);float beltHeight=max(1.,uHalf*mix(.10,.035+beltClump*.020,visualDense));float beltChance=mix(.48,.30+beltClump*.12,visualDense);
  if(beltEnabled>.5&&belt>=beltInner&&belt<=beltOuter&&abs(position.y)<=beltHeight&&beltHash<beltChance){ratio=max(ratio,mix(.46+beltHash*.17,.44+beltHash*.17,visualDense));beltPoint=1.;}
  float bodyDepth=0.,shadow=0.;for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;bodyDepth=max(bodyDepth,inward);ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}if(i>0){vec3 shadowDir=uShadowDirs[i];float behind=dot(d,shadowDir);if(behind>0.){vec3 radial=d-shadowDir*behind;float shadowRadius=uBodies[i].w*(2.40+behind/uHalf*.60)+.12;float softness=1.-smoothstep(shadowRadius*shadowRadius*.50,shadowRadius*shadowRadius,dot(radial,radial));float distanceFade=1.-smoothstep(uHalf*.18,uHalf*1.15,behind);shadow=max(shadow,softness*distanceFade);}}}
- vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324,ringPoint=0.;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.47+f*.25);ringPoint=1.;}
+ vec3 sd=position-uSaturn;float ringY=sd.y*.894-sd.z*.448,ringZ=sd.y*.448+sd.z*.894,rr=length(vec2(sd.x,ringZ));float sr=uBodies[6].w,ri=sr*1.25,ro=sr*2.08,rt=sr*.324,ringPoint=0.;if(rr>ri&&rr<ro&&abs(ringY)<rt){float f=sin(3.14159*(rr-ri)/(ro-ri))*(1.-abs(ringY)/rt);ratio=max(ratio,.44+f*.21);ringPoint=1.;}
  float sizeFactor=.82+aSeed*.36;if(bodyDepth>0.)sizeFactor*=mix(1.,.24+2.16*pow(bodyDepth,.72),compactLayer);if(ratio<=.281)sizeFactor*=1.+.28*sin(uTime*(.65+aSeed*.55)+aSeed*6.28318);
- float mercuryDepth=max(0.,1.-length(position-uBodies[1].xyz)/uBodies[1].w);float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);float emphasis=max(max(mercuryDepth,iceDepth),max(beltPoint*.55,ringPoint*.75));if(mercuryDepth>0.)sizeFactor*=1.+.55*pow(mercuryDepth,.65);if(iceDepth>0.)sizeFactor*=1.+.62*pow(iceDepth,.65);if(ringPoint>.5)sizeFactor*=1.38;
+ float mercuryDepth=max(0.,1.-length(position-uBodies[1].xyz)/uBodies[1].w);float iceDepth=max(1.-length(position-uBodies[7].xyz)/uBodies[7].w,1.-length(position-uBodies[8].xyz)/uBodies[8].w);float emphasis=max(max(mercuryDepth*.82,iceDepth*.88),max(beltPoint*.82,ringPoint*.30));if(mercuryDepth>0.)sizeFactor*=1.+.45*pow(mercuryDepth,.65);if(iceDepth>0.)sizeFactor*=1.+.50*pow(iceDepth,.65);if(ringPoint>.5)sizeFactor*=1.15;
  float meteorPeriod=3.6,meteorDuration=1.9,cycle=floor(uTime/meteorPeriod),age=mod(uTime,meteorPeriod)-(.25+hash(vec3(cycle,7.,11.))*.55),meteorOn=step(0.,age)*step(age,meteorDuration);
  float meteorAngle=hash(vec3(cycle,17.,3.))*6.28318,meteorLift=(hash(vec3(cycle,23.,5.))-.5)*.8;vec3 meteorDir=normalize(vec3(cos(meteorAngle),meteorLift,sin(meteorAngle)));vec3 meteorSide=normalize(vec3(-meteorDir.z,0.,meteorDir.x)),meteorUp=normalize(cross(meteorSide,meteorDir));
  vec3 meteorStart=-meteorDir*uHalf*1.12+meteorSide*uHalf*(hash(vec3(cycle,29.,13.))-.5)*.7+meteorUp*uHalf*(hash(vec3(cycle,31.,19.))-.5)*.38;vec3 meteorHead=meteorStart+meteorDir*(age/meteorDuration)*(uHalf*2.24),meteorDelta=meteorHead-position;float behind=dot(meteorDelta,meteorDir);vec3 meteorPerp=meteorDelta-meteorDir*behind;float meteorD2=dot(meteorPerp,meteorPerp),tailLength=uHalf*.42;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<tailLength&&meteorD2<2.6){float intensity=sin(3.14159*age/meteorDuration)*pow(1.-behind/tailLength,1.3)*(1.-meteorD2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}
- vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.55);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.18;radius*=mix(1.65,1.08,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.28,1.08,visualDense);float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
+ vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.47);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.12;radius*=mix(1.55,1.00,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.55,1.32,visualDense);float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
 }`;
 const fragmentShader=`
 precision highp float;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis;
 vec3 palette(float t){vec3 c[11];c[0]=vec3(.192,.212,.584);c[1]=vec3(.271,.459,.706);c[2]=vec3(.455,.678,.82);c[3]=vec3(.671,.851,.914);c[4]=vec3(.878,.953,.973);c[5]=vec3(1.,1.,.749);c[6]=vec3(.996,.878,.565);c[7]=vec3(.992,.682,.38);c[8]=vec3(.957,.427,.263);c[9]=vec3(.843,.188,.153);c[10]=vec3(.647,0.,.149);int i=int(min(10.,floor(t*11.)));if(i==0)return c[0];if(i==1)return c[1];if(i==2)return c[2];if(i==3)return c[3];if(i==4)return c[4];if(i==5)return c[5];if(i==6)return c[6];if(i==7)return c[7];if(i==8)return c[8];if(i==9)return c[9];return c[10];}
-void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;alpha=min(1.,alpha*(1.+vEmphasis*.55));alpha*=1.-vShadow*.99;if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);gl_FragColor=vec4(palette(vRatio),alpha);}`;
+void main(){if(vVisible<.5)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;alpha=min(1.,alpha*(1.+vEmphasis*.48));alpha*=1.-vShadow*.99;if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);gl_FragColor=vec4(palette(vRatio),alpha);}`;
 
 function rebuild(){
   if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
@@ -110,7 +110,7 @@ function rebuild(){
   const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===150?BODY_STEP_150:n===100?BODY_STEP_100:BODY_STEP_50,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
-  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:gridSize===150?1.02:1},uZoom:{value:zoom},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()},uShadowDirs:{value:Array.from({length:9},()=>new THREE.Vector3())}}});
+  material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:1},uZoom:{value:zoom},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()},uShadowDirs:{value:Array.from({length:9},()=>new THREE.Vector3())}}});
   material.defaultAttributeValues.aDetail=[0];
   cloud=new THREE.Points(geometry,material);scene.add(cloud);
   if(gridSize>50){
