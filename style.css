@@ -27,3 +27,10 @@
 .workspace{align-items:stretch}
 .hologram{overflow:hidden}
 .data-panel{position:relative;z-index:2;overflow:hidden}
+.planet-cell{display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
+.planet-cell>span{min-width:92px;text-align:right}
+.follow-button{height:20px;min-width:92px;padding:0 7px;border:1px solid #3a3a3a;background:#111;color:#aaa;font:9px/18px inherit;cursor:pointer;white-space:nowrap}
+.follow-button:hover,.follow-button:focus-visible{border-color:#888;color:#fff;background:#1d1d1d;outline:none}
+.follow-button[aria-pressed=true]{border-color:#eee;background:#eee;color:#000}
+.is-following{background:#1d1d1d}
+th:first-child,td:first-child{width:220px}
