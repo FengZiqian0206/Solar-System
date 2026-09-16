@@ -1,5 +1,5 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
-import { initPlanetCharts } from './planet-charts.js?v=planet-charts-1';
+import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],

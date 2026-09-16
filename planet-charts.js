@@ -9,28 +9,42 @@ const METRICS=[
 ];
 const format=(v,d)=>v.toLocaleString('en-US',{maximumFractionDigits:d});
 
-export function buildPlanetCharts(planets,filter=''){
+export function buildPlanetCharts(planets,filter='',focus=-1){
   const query=filter.trim().toLowerCase();
   const selected=planets.map((p,i)=>({p,i})).filter(({p})=>p[0].includes(query)||p[1].toLowerCase().includes(query));
   if(!selected.length)return '<p class="chart-empty">没有匹配的行星 · NO MATCHING PLANETS</p>';
-  return `<div class="chart-intro">行星参数图谱 · PLANETARY ATLAS <span>彩色点对应行星 · COLORED POINTS REPRESENT PLANETS</span></div><div class="chart-grid">`+METRICS.map(([cn,en,unit,value,digits,log],metric)=>{
-    // Fixed full-system scales make filtered views directly comparable.
-    const values=planets.map(value),min=log?Math.min(...values):0,max=Math.max(...values);
-    const position=v=>125+225*(log?Math.log(v/min)/Math.log(max/min):v/max);
+  if(!selected.some(({i})=>i===focus))focus=-1;
+  // Independent full-system axes retain their physical units and fixed scales.
+  const axes=METRICS.map(([cn,en,unit,value,digits,log],m)=>{
+    const values=planets.map(value),min=log?Math.min(...values):0,max=Math.max(...values),x=75+m*237.5;
+    const y=v=>190-125*(log?Math.log(v/min)/Math.log(max/min):v/max);
     const ticks=[min,log?Math.sqrt(min*max):max/2,max];
-    const guides=ticks.map(v=>`<line class="chart-guide" x1="${position(v)}" x2="${position(v)}" y1="18" y2="${selected.length*27+18}"/><text class="chart-tick" x="${position(v)}" y="12" text-anchor="middle">${format(v,2)}</text>`).join('');
-    const dots=selected.map(({p,i},row)=>{
-      const v=value(p),x=position(v),y=36+row*27;
-      return `<g class="chart-planet"><title>${p[0]} · ${p[1]}: ${format(v,digits)} ${unit}</title><text class="chart-name" x="2" y="${y+4}">${p[0]} <tspan>${p[1]}</tspan></text><line class="chart-track" x1="125" x2="350" y1="${y}" y2="${y}"/><line x1="125" x2="${x}" y1="${y}" y2="${y}" stroke="${COLORS[i]}" stroke-opacity=".4"/><circle cx="${x}" cy="${y}" r="7" fill="none" stroke="${COLORS[i]}" stroke-opacity=".26"/><circle cx="${x}" cy="${y}" r="3" fill="${COLORS[i]}"/><text class="chart-value" x="490" y="${y+4}" text-anchor="end">${format(v,digits)}</text></g>`;
-    }).join('');
-    return `<section class="metric-chart"><header><h3><small>0${metric+1}</small> ${cn} · ${en}</h3><p>${unit} / ${log?'对数刻度 · LOG SCALE':'线性刻度 · LINEAR SCALE'}</p></header><svg viewBox="0 0 500 ${selected.length*27+28}" role="img" aria-label="${cn} · ${en}，${unit}，${log?'对数刻度':'线性刻度'}">${guides}${dots}</svg></section>`;
-  }).join('')+'</div>';
+    return {x,y,markup:`<g class="spectrum-axis"><text x="${x}" y="12" text-anchor="middle">${cn}</text><text class="axis-en" x="${x}" y="27" text-anchor="middle">${en}</text><text class="axis-unit" x="${x}" y="43" text-anchor="middle">${unit} / ${log?'对数 · LOG':'线性 · LINEAR'}</text><line x1="${x}" x2="${x}" y1="65" y2="190"/>${ticks.map(v=>`<path d="M${x-4} ${y(v)}h8"/><text class="axis-tick" x="${x+10}" y="${y(v)+3}">${format(v,2)}</text>`).join('')}</g>`};
+  });
+  const paths=selected.slice().sort((a,b)=>(a.i===focus)-(b.i===focus)).map(({p,i})=>{
+    const points=axes.map((a,m)=>`${a.x},${a.y(METRICS[m][3](p))}`).join(' ');
+    const description=METRICS.map(([cn,,unit,value,digits])=>`${cn}: ${format(value(p),digits)} ${unit}`).join(' / ');
+    return `<g class="chart-planet${focus===i?' is-selected':focus>=0?' is-muted':''}" data-planet="${i}" style="--planet-color:${COLORS[i]}"><title>${p[0]} · ${p[1]} / ${description}</title><polyline class="spectrum-hit" points="${points}"/><polyline class="spectrum-line" points="${points}"/>${axes.map((a,m)=>`<circle cx="${a.x}" cy="${a.y(METRICS[m][3](p))}" r="3"/>`).join('')}</g>`;
+  }).join('');
+  const legend=selected.map(({p,i})=>`<button class="spectrum-key" data-planet="${i}" aria-pressed="${i===focus}" style="--planet-color:${COLORS[i]}"><i aria-hidden="true"></i>${p[0]} · ${p[1]}</button>`).join('');
+  const p=planets[focus];
+  const readout=p?`<strong>${p[0]} · ${p[1]}</strong>`+METRICS.map(([cn,,unit,value,digits])=>`<span>${cn} <b>${format(value(p),digits)}</b> ${unit}</span>`).join(''):'点击行星名称查看全部数值 · SELECT A PLANET FOR EXACT VALUES';
+  return `<div class="chart-intro">行星参数谱线 · PLANETARY SPECTRUM <span>各轴独立刻度 · INDEPENDENT AXIS SCALES</span></div><div class="spectrum-legend" aria-label="突出行星 · HIGHLIGHT PLANET">${legend}</div><div class="spectrum-scroll"><svg class="spectrum" viewBox="0 0 1100 215" role="img" aria-label="八大行星五项指标的平行坐标图 · Five-metric planetary parallel coordinates"><desc>每条彩色线代表一颗行星。各轴单位和刻度独立，线的斜率不代表物理变化。Each colored line represents one planet; axes use independent units and scales.</desc>${[65,127.5,190].map(y=>`<line class="spectrum-guide" x1="75" x2="1025" y1="${y}" y2="${y}"/>`).join('')}${axes.map(a=>a.markup).join('')}${paths}</svg></div><div class="spectrum-readout" aria-live="polite">${readout}</div>`;
 }
 
 export function initPlanetCharts(planets){
   const toggle=document.getElementById('chartToggle'),charts=document.getElementById('planetCharts');
   const table=document.querySelector('.table-wrap'),search=document.getElementById('search');
-  function draw(){charts.innerHTML=buildPlanetCharts(planets,search.value)}
+  let focus=-1;
+  function draw(){charts.innerHTML=buildPlanetCharts(planets,search.value,focus)}
+  charts.addEventListener('click',event=>{
+    const item=event.target.closest('[data-planet]');
+    if(!item)return;
+    const index=+item.dataset.planet;
+    focus=focus===index?-1:index;
+    draw();
+    charts.querySelector(`button[data-planet="${index}"]`)?.focus({preventScroll:true});
+  });
   toggle.addEventListener('click',()=>{
     const active=toggle.getAttribute('aria-pressed')!=='true';
     toggle.setAttribute('aria-pressed',String(active));
