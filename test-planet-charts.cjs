@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const app=fs.readFileSync('app.js','utf8');
+const planets=vm.runInNewContext(app.match(/const PLANETS = (\[[\s\S]*?\n\]);/)[1]);
+const source=fs.readFileSync('planet-charts.js','utf8').replaceAll('export function','function');
+const build=vm.runInNewContext(source+'\nbuildPlanetCharts;');
+const html=build(planets);
+assert.equal((html.match(/<svg /g)||[]).length,5);
+assert.equal((html.match(/class="chart-planet"/g)||[]).length,40);
+assert.equal((build(planets,'Earth').match(/class="chart-planet"/g)||[]).length,5);
+assert.match(build(planets,'不存在'),/NO MATCHING PLANETS/);
+assert.match(html,/60,182/);
+assert.match(html,/0\.3871/);
+assert.doesNotMatch(html,/NaN|Infinity|undefined/);
+console.log('Planet charts: five metrics, exact values, filtering and empty state passed.');
