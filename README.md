@@ -1,4 +1,4 @@
-# Solar System
+# Solar System Touring Guide (Visualization of the orbital data of each planet in the solar system)
 
 [在线打开 / GitHub Pages](https://fengziqian0206.github.io/Solar-System/)
 
@@ -22,6 +22,7 @@
 
 - 最初参考：[ECharts GL](https://github.com/ecomfe/echarts-gl) 三维散点示例（用户提供的 simplex-noise 示例代码）。
 - 三维网页实现：[Three.js](https://threejs.org/)。
+- 原有项目说明中列出的运动数据参考：[NASA/JPL — Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html)。原英文说明与参数列表保留在文末。
 - 本次可复现数据流程的原始来源：[NASA/JPL — Planetary Physical Parameters](https://ssd.jpl.nasa.gov/planets/phys_par.html)。原始响应内容保存到 `data/jpl-planetary-physical-parameters.html`，未经删改；下载地址、时间、字节数和 SHA-256 保存在 `data/source.json`。
 
 新增 Python 图使用 JPL 表中的 **Mean Radius（km）** 和 **Sidereal Orbital Period（y）**，取八颗行星的中心值，使用双对数坐标；误差值及参考文献保留在原始文件中。矮行星表不属于这张图的范围。
@@ -83,3 +84,47 @@ Solar-System/
 ```
 
 为保持 GitHub Pages、模块导入和资源路径不变，本次不把原有网页搬到子目录，也不删除原有内容。
+## 原有项目说明 / Original project notes
+
+<details>
+<summary>展开原有英文说明与参数列表（保留原文）</summary>
+
+Direct access to run: https://fengziqian0206.github.io/Solar-System/
+
+Data source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
+
+
+<img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
+
+This is the motion simulation of the eight planets in the solar system : Based on the real revolution period, eccentricity and Kepler equation of the eight planets.
+I want to build a miniature three-dimensional solar system in the form of a whole system lattice. The color depth and size of the lattice represent the known tangible objects in space, and these information change with time.
+
+You can :
+
+1. Drag the mouse or scroll wheel to zoom and observe from different perspectives.
+2. Click the full screen view window.
+3. Change the number of point clouds or change the time rate.
+4. Click "follow" behind different planets to follow the planetary perspective.
+5. Switch the data visualization chart.
+
+Information details：
+
+SEMI-MAJOR AXIS (AU)	PERIOD (DAYS)	PERIOD (EARTH YEARS)	MEAN SPEED (km/s)	MEAN RADIUS (km)
+
+  Mercury 0.3871 87.969	0.241	47.36	2,439.7
+
+  Venus 0.7233 224.701 0.615 35.02 6,051.8
+
+  Earth 1.0000 365.256 1.000 29.78 6,371
+
+  Mars 1.5237	686.98	1.881	24.07	3,389.5
+
+  Jupiter 5.2028 4,332.59	11.862 13.07	69,911
+
+  Saturn 9.5388	10,759.22	29.457 9.69	58,232
+
+  Uranus 19.1914	30,688.5 84.019	6.81	25,362
+
+  Neptune 30.0611	60,182 164.767 5.43	24,622
+
+</details>

@@ -35,6 +35,47 @@ AI 承担了大部分代码编写与调整，包括 Three.js 渲染、交互界�
 
 ## 工作量与时间记录
 
-截至本次整理前，网页仓库共有 70 次提交，时间从 2026 年 9 月 10 日到 9 月 17 日，跨约一周；此前的桌面版探索不包含在这个范围内。工作集中在视觉方向、粒子参数、布局、运动规则、交互和兼容性的多轮反馈与修改。提交次数不等同于实际工时。
+网页核心制作阶段从 2026 年 9 月 10 日到 9 月 17 日，产生 70 次提交；连同后续文档编辑，本次整理前的 GitHub 仓库共有 76 次提交，延续到 9 月 25 日，共 7 个有提交记录的日期。此前的桌面版探索不包含在这个范围内。工作集中在视觉方向、粒子参数、布局、运动规则、交互和兼容性的多轮反馈与修改。提交次数和活跃日期不等同于实际工时。
 
 当前没有完整、可核对的累计 token 或工时记录，因此不填写估计 token 总数或虚构小时数。我的主要贡献是创意、审美判断、需求澄清与验收；AI 的主要贡献是把这些判断转化为代码，并协助调试与整理项目。
+
+## 原有协作记录 / Original process notes
+
+以下保留本次整理前已在 GitHub 发布的中英文原文，其中约 70 次提交是当时的概括；可核对的分阶段记录见上文。
+
+<details>
+<summary>展开原有协作记录（保留原文）</summary>
+
+The project lasted from September 10 to September 25, about 7 active development days, and currently produced about 70 git submissions.
+
+- Use tools: use Codex to realize three.js/webgl/glsl to realize point cloud; Html/css/svg to achieve UI and charts; Git/github pages manage version and release;
+
+- Reserved content: always use the initial planets planetary data as the data source for tables, orbits and charts.
+
+- Discard content: 1.the first five separate indicator charts. They occupy space and are difficult, so they are finally merged into a five axis planetary parameter spectrum.
+- 2.The early echarts desktop solution has also been replaced by the three.js web page solution for sharing through GitHub pages. Repeatedly modify the size relationship of planets to beautify the visual effect.
+- 3.Repeatedly modify the details of planetary point clouds, especially Saturn rings, to present a good-looking effect.
+
+- My work content: develop visual direction, scale, point size, transparency, density, planetary details, interaction mode and UI specification.
+
+- Codex's contribution: complete the main code, shaders, Kepler tracks, follow the perspective, charts, compatibility fixes, testing, GIT submission and release.
+
+- Cooperation mode: I am responsible for setting goals, aesthetic judgment and acceptance; AI is responsible for implementation, troubleshooting and iteration, and entering the details of parameter modification.
+
+
+项目从 9 月 10 日持续到 9 月 25 日，约 7 个活跃开发日，目前共产生大约 70 次 Git 提交。
+
+- 使用工具：用codex来实现Three.js/WebGL/GLSL 实现点云；HTML/CSS/SVG 实现 UI 和图表；Git/GitHub Pages 管理版本和发布；
+
+- 保留内容：始终使用初始的一份 PLANETS 行星数据作为表格、轨道和图表的数据源。
+
+- 抛弃内容：最初分开的五张指标图表。它们占空间、比较困难，因此最终合并为一张五轴行星参数谱线图。早期的 ECharts 桌面方案也被 Three.js 网页方案取代，以便通过 GitHub Pages 分享。
+- 反复修改行星的大小关系用来美化视觉效果，反复修改行星点云细节尤其是土星环要呈现好看的效果。
+
+- 我的工作内容：制定视觉方向、比例、点大小、透明度、密度、行星细节、交互方式与 UI 规范。
+
+- codex的贡献：完成主要代码、着色器、开普勒轨道、跟随视角、图表、兼容性修复、测试、Git 提交和发布。
+
+- 合作方式：我负责制定目标、审美判断和验收；AI负责实现、排错和迭代，进入参数修改细节。
+
+</details>
