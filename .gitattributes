@@ -1,0 +1,3 @@
+# Preserve downloaded source and the supplied picture byte for byte on Windows too.
+data/jpl-planetary-physical-parameters.html -text
+out/main.jpg binary

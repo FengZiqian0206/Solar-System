@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+<title id="title">Solar System: planetary size and orbital time</title>
+<desc id="desc">Eight planets. Horizontal axis: sidereal orbital period in years. Vertical axis: mean radius in kilometres. Both axes are logarithmic. Exact central values appear below.</desc>
+<rect width="1200" height="900" fill="#080a0e"/>
+<g font-family="Arial, sans-serif" fill="#f3f3f3">
+<text x="70.00" y="54.00" font-size="13" fill="#9da6b5" text-anchor="start">SOLAR SYSTEM / DATA STUDY 01</text>
+<text x="70.00" y="104.00" font-size="34" fill="#ffffff" text-anchor="start">Planetary size, orbital time</text>
+<text x="70.00" y="133.00" font-size="14" fill="#b6bcc7" text-anchor="start">NASA / JPL source snapshot · Eight planets · Logarithmic axes</text>
+<line x1="120.00" y1="635.00" x2="1060.00" y2="635.00" stroke="#222731"/>
+<text x="105.00" y="639.00" font-size="12" fill="#b6bcc7" text-anchor="end">2,000</text>
+<line x1="120.00" y1="522.57" x2="1060.00" y2="522.57" stroke="#222731"/>
+<text x="105.00" y="526.57" font-size="12" fill="#b6bcc7" text-anchor="end">5,000</text>
+<line x1="120.00" y1="437.52" x2="1060.00" y2="437.52" stroke="#222731"/>
+<text x="105.00" y="441.52" font-size="12" fill="#b6bcc7" text-anchor="end">10,000</text>
+<line x1="120.00" y1="352.48" x2="1060.00" y2="352.48" stroke="#222731"/>
+<text x="105.00" y="356.48" font-size="12" fill="#b6bcc7" text-anchor="end">20,000</text>
+<line x1="120.00" y1="240.05" x2="1060.00" y2="240.05" stroke="#222731"/>
+<text x="105.00" y="244.05" font-size="12" fill="#b6bcc7" text-anchor="end">50,000</text>
+<line x1="120.00" y1="155.00" x2="1060.00" y2="155.00" stroke="#222731"/>
+<text x="105.00" y="159.00" font-size="12" fill="#b6bcc7" text-anchor="end">100,000</text>
+<line x1="120.00" y1="155.00" x2="120.00" y2="635.00" stroke="#222731"/>
+<text x="120.00" y="660.00" font-size="12" fill="#b6bcc7" text-anchor="middle">0.2</text>
+<line x1="339.01" y1="155.00" x2="339.01" y2="635.00" stroke="#222731"/>
+<text x="339.01" y="660.00" font-size="12" fill="#b6bcc7" text-anchor="middle">1</text>
+<line x1="652.34" y1="155.00" x2="652.34" y2="635.00" stroke="#222731"/>
+<text x="652.34" y="660.00" font-size="12" fill="#b6bcc7" text-anchor="middle">10</text>
+<line x1="965.68" y1="155.00" x2="965.68" y2="635.00" stroke="#222731"/>
+<text x="965.68" y="660.00" font-size="12" fill="#b6bcc7" text-anchor="middle">100</text>
+<line x1="1060.00" y1="155.00" x2="1060.00" y2="635.00" stroke="#222731"/>
+<text x="1060.00" y="660.00" font-size="12" fill="#b6bcc7" text-anchor="middle">200</text>
+<text x="120.00" y="686.00" font-size="12" fill="#b6bcc7" text-anchor="start">ORBITAL PERIOD / YEARS</text>
+<text transform="translate(28 405) rotate(-90)" text-anchor="middle" font-size="12" fill="#b6bcc7">MEAN RADIUS / KM</text>
+<circle class="planet" cx="145.29" cy="610.63" r="7" fill="#aeb5c2"><title>Mercury: 2439.4 km; 0.240847 years</title></circle>
+<text x="160.29" y="598.63" font-size="15" fill="#aeb5c2" text-anchor="start">Mercury</text>
+<circle class="planet" cx="272.90" cy="499.15" r="7" fill="#efc26e"><title>Venus: 6051.8 km; 0.615197 years</title></circle>
+<text x="257.90" y="523.15" font-size="15" fill="#efc26e" text-anchor="end">Venus</text>
+<circle class="planet" cx="339.01" cy="492.84" r="7" fill="#64c4e9"><title>Earth: 6371.01 km; 1.00002 years</title></circle>
+<text x="354.01" y="478.84" font-size="15" fill="#64c4e9" text-anchor="start">Earth</text>
+<circle class="planet" cx="424.97" cy="570.27" r="7" fill="#ed8761"><title>Mars: 3389.5 km; 1.88085 years</title></circle>
+<text x="439.97" y="590.27" font-size="15" fill="#ed8761" text-anchor="start">Mars</text>
+<circle class="planet" cx="675.59" cy="198.92" r="7" fill="#e35748"><title>Jupiter: 69911 km; 11.8626 years</title></circle>
+<text x="660.59" y="183.92" font-size="15" fill="#e35748" text-anchor="end">Jupiter</text>
+<circle class="planet" cx="799.31" cy="221.35" r="7" fill="#e9cc8b"><title>Saturn: 58232 km; 29.4475 years</title></circle>
+<text x="814.31" y="246.35" font-size="15" fill="#e9cc8b" text-anchor="start">Saturn</text>
+<circle class="planet" cx="941.98" cy="323.33" r="7" fill="#84dad6"><title>Uranus: 25362 km; 84.0168 years</title></circle>
+<text x="926.98" y="305.33" font-size="15" fill="#84dad6" text-anchor="end">Uranus</text>
+<circle class="planet" cx="1033.65" cy="326.97" r="7" fill="#6b94ec"><title>Neptune: 24622 km; 164.791 years</title></circle>
+<text x="1018.65" y="350.97" font-size="15" fill="#6b94ec" text-anchor="end">Neptune</text>
+<line x1="70.00" y1="712.00" x2="1130.00" y2="712.00" stroke="#434a55"/>
+<text x="70.00" y="742.00" font-size="12" fill="#b6bcc7" text-anchor="start">SOURCE VALUES / MEAN RADIUS (KM) · SIDEREAL ORBITAL PERIOD (YEARS)</text>
+<text x="70.00" y="777.00" font-size="14" fill="#aeb5c2" text-anchor="start">Mercury</text>
+<text x="70.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">2,439.4 km</text>
+<text x="70.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">0.2408467 y</text>
+<text x="203.00" y="777.00" font-size="14" fill="#efc26e" text-anchor="start">Venus</text>
+<text x="203.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">6,051.8 km</text>
+<text x="203.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">0.61519726 y</text>
+<text x="336.00" y="777.00" font-size="14" fill="#64c4e9" text-anchor="start">Earth</text>
+<text x="336.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">6,371.0084 km</text>
+<text x="336.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">1.0000174 y</text>
+<text x="469.00" y="777.00" font-size="14" fill="#ed8761" text-anchor="start">Mars</text>
+<text x="469.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">3,389.5 km</text>
+<text x="469.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">1.8808476 y</text>
+<text x="602.00" y="777.00" font-size="14" fill="#e35748" text-anchor="start">Jupiter</text>
+<text x="602.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">69,911 km</text>
+<text x="602.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">11.862615 y</text>
+<text x="735.00" y="777.00" font-size="14" fill="#e9cc8b" text-anchor="start">Saturn</text>
+<text x="735.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">58,232 km</text>
+<text x="735.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">29.447498 y</text>
+<text x="868.00" y="777.00" font-size="14" fill="#84dad6" text-anchor="start">Uranus</text>
+<text x="868.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">25,362 km</text>
+<text x="868.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">84.016846 y</text>
+<text x="1001.00" y="777.00" font-size="14" fill="#6b94ec" text-anchor="start">Neptune</text>
+<text x="1001.00" y="803.00" font-size="12" fill="#e1e5ec" text-anchor="start">24,622 km</text>
+<text x="1001.00" y="826.00" font-size="12" fill="#b6bcc7" text-anchor="start">164.79132 y</text>
+<text x="70.00" y="875.00" font-size="12" fill="#8992a0" text-anchor="start">Source: ssd.jpl.nasa.gov/planets/phys_par.html · Central values; uncertainties remain in the raw source.</text>
+</g></svg>
