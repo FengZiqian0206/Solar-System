@@ -1,4 +1,4 @@
-The project lasted from September 10 to September 25, about 7 active development days, and currently produced about 70 git submissions.
+The project lasted from September 10 to September 26, about 8 active development days, and currently produced about 75 git submissions.
 
 - Use tools: use Codex to realize three.js/webgl/glsl to realize point cloud; Html/css/svg to achieve UI and charts; Git/github pages manage version and release;
 
@@ -15,7 +15,7 @@ The project lasted from September 10 to September 25, about 7 active development
 - Cooperation mode: I am responsible for setting goals, aesthetic judgment and acceptance; AI is responsible for implementation, troubleshooting and iteration, and entering the details of parameter modification.
 
 
-项目从 9 月 10 日持续到 9 月 25 日，约 7 个活跃开发日，目前共产生大约 70 次 Git 提交。
+项目从 9 月 10 日持续到 9 月 26 日，约 8 个活跃开发日，目前共产生大约 75 次 Git 提交。
 
 - 使用工具：用codex来实现Three.js/WebGL/GLSL 实现点云；HTML/CSS/SVG 实现 UI 和图表；Git/GitHub Pages 管理版本和发布；
 
