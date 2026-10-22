@@ -1,7 +1,7 @@
 :root{color-scheme:dark;--bg:#000;--panel:#0c0c0c;--panel2:#141414;--line:#303030;--muted:#9e9e9e;--fg:#f0f0f0}
 /* The only new colour accent: a cursor that becomes the third-person player point. */
-#rainbowCursor{display:none;position:fixed;z-index:100;pointer-events:none;width:22px;height:22px;transform:translate(-50%,-50%)}
-#rainbowCursor i{display:block;width:100%;height:100%;border-radius:50%;background:radial-gradient(circle at 30% 25%,#ffffffda,transparent 42%),radial-gradient(circle at 50% 45%,transparent 35%,#0008 100%),conic-gradient(#ff578e,#ffcb58,#7be9a0,#55cefa,#a979ff,#ff578e);animation:rainbow-turn 12s linear infinite}
+#rainbowCursor{display:none;position:fixed;z-index:100;pointer-events:none;width:16px;height:16px;transform:translate(-50%,-50%)}
+#rainbowCursor i{display:block;width:100%;height:100%;border-radius:50%;background:#ff557d;animation:rainbow-turn 12s linear infinite}
 #rainbowCursor span{position:absolute;left:31px;top:-17px;color:#e5e5e5;font:11px/20px Arial,sans-serif;white-space:nowrap;text-shadow:0 1px 5px #000;opacity:0;animation:roam-prompt 5s ease-in-out 5s infinite}
 #rainbowCursor.tip-left span{left:auto;right:31px}#rainbowCursor.tip-below span{top:20px}
 @keyframes rainbow-turn{to{filter:hue-rotate(360deg)}}
