@@ -78,15 +78,16 @@ const { chromium } = require('playwright');
       const scene=new THREE.Scene(), point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
       const camera=new THREE.OrthographicCamera(-1,1,1,-1,.1,100), target=new THREE.WebGLRenderTarget(32,32);
       const previousTarget=renderer.getRenderTarget(), clearColor=renderer.getClearColor(new THREE.Color()), clearAlpha=renderer.getClearAlpha();
-      function sample(x,time,near=true){
-        geometry.attributes.position.setXYZ(0,x,0,0); geometry.attributes.position.needsUpdate=true;
-        camera.position.set(x,0,20);camera.lookAt(x,0,0);
+      function sample(x,time,near=true,space=false){
+        const y=space?12:0;
+        geometry.attributes.position.setXYZ(0,x,y,0); geometry.attributes.position.needsUpdate=true;
+        camera.position.set(x,y,20);camera.lookAt(x,y,0);
         material.uniforms.uRoam.value=1;material.uniforms.uTime.value=time;
-        material.uniforms.uPlayer.value.set(near?0:100,0,0);
+        material.uniforms.uPlayer.value.set(near?0:100,y,0);
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
         const rgba=new Uint8Array(4);renderer.readRenderTargetPixels(target,16,16,1,1,rgba);return Array.from(rgba);
       }
-      try{return {centre:sample(0,0),changed:sample(0,1),cycle:sample(0,4),near:sample(52/49,1),nearBase:sample(52/49,1,false),middle:sample(104/49,1),middleBase:sample(104/49,1,false),far:sample(208/49,1),farBase:sample(208/49,1,false)};}
+      try{return {centre:sample(0,0),changed:sample(0,1),cycle:sample(0,4),near:sample(52/49,1),nearBase:sample(52/49,1,false),middle:sample(104/49,1),middleBase:sample(104/49,1,false),far:sample(208/49,1),farBase:sample(208/49,1,false),space:sample(52/49,1,true,true),spaceBase:sample(52/49,1,false,true)};}
       finally{renderer.setRenderTarget(previousTarget);renderer.setClearColor(clearColor,clearAlpha);geometry.dispose();material.dispose();target.dispose();}
     });
     assert.ok(Math.abs(tintPixels.centre[3]/255-.7)<.01);
@@ -97,6 +98,8 @@ const { chromium } = require('playwright');
     assert.ok(tintPixels.middle.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.middleBase[i])>10));
     assert.equal(tintPixels.middle[3],tintPixels.middleBase[3]);
     assert.deepEqual(tintPixels.far,tintPixels.farBase);
+    assert.ok(tintPixels.near.slice(0,3).every((v,i)=>Math.abs(v-tintPixels.changed[i])<15));
+    assert.ok(tintPixels.space[3]>125 && tintPixels.space[3]>tintPixels.spaceBase[3]+60);
     // Overview drag reverses horizontal direction only.
     await page.mouse.move(650,280);
     const overview=await page.evaluate(()=>window.qaCloud.rotation.toArray());
