@@ -86,14 +86,16 @@ const { chromium } = require('playwright');
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
         const rgba=new Uint8Array(4);renderer.readRenderTargetPixels(target,16,16,1,1,rgba);return Array.from(rgba);
       }
-      try{return {centre:sample(0,0),changed:sample(0,1),cycle:sample(0,4),near:sample(52/49,1),nearBase:sample(52/49,1,false),far:sample(104/49,1),farBase:sample(104/49,1,false)};}
+      try{return {centre:sample(0,0),changed:sample(0,1),cycle:sample(0,4),near:sample(52/49,1),nearBase:sample(52/49,1,false),middle:sample(104/49,1),middleBase:sample(104/49,1,false),far:sample(208/49,1),farBase:sample(208/49,1,false)};}
       finally{renderer.setRenderTarget(previousTarget);renderer.setClearColor(clearColor,clearAlpha);geometry.dispose();material.dispose();target.dispose();}
     });
     assert.ok(Math.abs(tintPixels.centre[3]/255-.7)<.01);
     assert.ok(tintPixels.centre.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.changed[i])>30));
     assert.deepEqual(tintPixels.cycle,tintPixels.centre);
-    assert.ok(tintPixels.near.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.nearBase[i])>3),JSON.stringify(tintPixels));
+    assert.ok(tintPixels.near.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.nearBase[i])>60),JSON.stringify(tintPixels));
     assert.equal(tintPixels.near[3],tintPixels.nearBase[3]);
+    assert.ok(tintPixels.middle.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.middleBase[i])>10));
+    assert.equal(tintPixels.middle[3],tintPixels.middleBase[3]);
     assert.deepEqual(tintPixels.far,tintPixels.farBase);
     // Overview drag reverses horizontal direction only.
     await page.mouse.move(650,280);
