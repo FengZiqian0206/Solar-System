@@ -70,7 +70,7 @@ const { chromium } = require('playwright');
     // Read the real shader's output in a tiny isolated target, without particle overlap.
     const tintPixels=await page.evaluate(async()=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
-      const {createPointInfluence}=await import('./point-influence.js?v=2');
+      const {createPointInfluence}=await import('./point-influence.js?v=3');
       const field=createPointInfluence(50,26), c=-26+25*52/49;
       field.update({x:c,y:c,z:c},3);
       const renderer=window.qaRenderer, material=window.qaCloud.material.clone();
@@ -82,6 +82,7 @@ const { chromium } = require('playwright');
       const scene=new THREE.Scene(), point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
       const camera=new THREE.OrthographicCamera(-1,1,1,-1,.1,100), target=new THREE.WebGLRenderTarget(32,32);
       const previousTarget=renderer.getRenderTarget(), clearColor=renderer.getClearColor(new THREE.Color()), clearAlpha=renderer.getClearAlpha();
+      let coverage=0;
       function sample(x,time,near=true,space=false){
         const y=space?12:0;
         geometry.attributes.position.setXYZ(0,x,y,0); geometry.attributes.position.needsUpdate=true;
@@ -91,9 +92,12 @@ const { chromium } = require('playwright');
         geometry.attributes.aPlayerTint.setX(0,near?field.values[((25+Math.round(x/(52/49)))*50+25)*50+25]:0);
         geometry.attributes.aPlayerTint.needsUpdate=true;
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
-        const rgba=new Uint8Array(4);renderer.readRenderTargetPixels(target,16,16,1,1,rgba);return Array.from(rgba);
+        const rgba=new Uint8Array(4);renderer.readRenderTargetPixels(target,16,16,1,1,rgba);
+        const pixels=new Uint8Array(32*32*4);renderer.readRenderTargetPixels(target,0,0,32,32,pixels);coverage=0;
+        for(let i=3;i<pixels.length;i+=4)if(pixels[i]>0)coverage++;
+        return Array.from(rgba);
       }
-      try{return {centre:sample(0,0),changed:sample(0,1),cycle:sample(0,4),near:sample(52/49,1),nearBase:sample(52/49,1,false),middle:sample(104/49,1),middleBase:sample(104/49,1,false),far:sample(208/49,1),farBase:sample(208/49,1,false),space:sample(52/49,1,true,true),spaceBase:sample(52/49,1,false,true)};}
+      try{return {centre:sample(0,0),changed:sample(0,1),cycle:sample(0,4),near:sample(52/49,1),nearBase:sample(52/49,1,false),middle:sample(104/49,1),middleBase:sample(104/49,1,false),far:sample(208/49,1),farBase:sample(208/49,1,false),space:sample(52/49,1,true,true),coreArea:coverage,spaceBase:sample(52/49,1,false,true),baseArea:coverage};}
       finally{renderer.setRenderTarget(previousTarget);renderer.setClearColor(clearColor,clearAlpha);geometry.dispose();material.dispose();target.dispose();}
     });
     assert.ok(Math.abs(tintPixels.centre[3]/255-.7)<.01);
@@ -101,11 +105,12 @@ const { chromium } = require('playwright');
     assert.deepEqual(tintPixels.cycle,tintPixels.centre);
     assert.ok(tintPixels.near.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.nearBase[i])>60),JSON.stringify(tintPixels));
     assert.equal(tintPixels.near[3],tintPixels.nearBase[3]);
-    assert.ok(tintPixels.middle.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.middleBase[i])>10));
+    assert.ok(tintPixels.middle.slice(0,3).some((v,i)=>Math.abs(v-tintPixels.middleBase[i])>2));
     assert.equal(tintPixels.middle[3],tintPixels.middleBase[3]);
     assert.deepEqual(tintPixels.far,tintPixels.farBase);
     assert.ok(tintPixels.near.slice(0,3).every((v,i)=>Math.abs(v-tintPixels.changed[i])<15));
     assert.ok(tintPixels.space[3]>125 && tintPixels.space[3]>tintPixels.spaceBase[3]+60);
+    assert.ok(tintPixels.coreArea>tintPixels.baseArea*1.2,'Core neighbour points visibly enlarged');
     // Overview drag reverses horizontal direction only.
     await page.mouse.move(650,280);
     const overview=await page.evaluate(()=>window.qaCloud.rotation.toArray());

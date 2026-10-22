@@ -1,7 +1,7 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
 import { createRoaming } from './roaming.js?v=grid-roam-7';
-import { createPointInfluence } from './point-influence.js?v=2';
+import { createPointInfluence } from './point-influence.js?v=3';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -107,7 +107,9 @@ void main(){
  vPlayer=uRoam*(1.-step(.01,playerDistance));
  // Per-cell temporal influence: quick colour arrival, deliberately slower departure.
  vPlayerTint=uRoam*aPlayerTint;
- if(vPlayer>.5)gl_PointSize=18.*uPixelRatio;
+ float playerCore=uRoam*smoothstep(.3,.85,aPlayerTint)*(1.-smoothstep(.4,1.7,playerDistance/(2.*uHalf/49.)));
+ if(playerCore>0.)gl_PointSize=min(gl_PointSize*(1.+.65*playerCore),64.*uPixelRatio);
+ if(vPlayer>.5)gl_PointSize=max(gl_PointSize,26.*uPixelRatio);
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
 }`;
