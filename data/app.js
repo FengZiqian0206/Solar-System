@@ -104,8 +104,8 @@ void main(){
  if(uRoam>.5)gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio,(bodyDepth>0.?48.:14.)*uPixelRatio);
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
- // Fixed 50³ lattice: softly tint only the immediately adjacent grid cells.
- vPlayerTint=uRoam*.28*(1.-smoothstep(.5,1.8,playerDistance/(2.*uHalf/49.)));
+ // Fixed 50³ lattice: stronger local tint, fading out over 3.5 grid steps.
+ vPlayerTint=uRoam*.55*(1.-smoothstep(.7,3.5,playerDistance/(2.*uHalf/49.)));
  if(vPlayer>.5)gl_PointSize=18.*uPixelRatio;
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
