@@ -111,6 +111,8 @@ const { chromium } = require('playwright');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.body.classList.contains('is-roaming') && !document.fullscreenElement);
     assert.equal(await page.locator('#labels').isVisible(), true);
+    // Overview labels are rebuilt by the next animation frame after fullscreen exit.
+    await page.waitForFunction(()=>document.querySelectorAll('#labels span').length===9);
     assert.equal(await page.locator('#labels span').count(), 9);
 
     await page.locator('#fullscreen').click();
