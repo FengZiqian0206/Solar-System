@@ -85,7 +85,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       const dx = document.pointerLockElement === viewport ? event.movementX : pointer ? event.clientX - pointer.x : 0;
       const dy = document.pointerLockElement === viewport ? event.movementY : pointer ? event.clientY - pointer.y : 0;
       pointer = { x: event.clientX, y: event.clientY };
-      yaw += Math.max(-120, Math.min(120, dx)) * .002;
+      yaw -= Math.max(-120, Math.min(120, dx)) * .002;
       pitch = Math.max(-1.35, Math.min(1.35, pitch + Math.max(-120, Math.min(120, dy)) * .002));
       return;
     }
@@ -128,7 +128,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       aimCamera();
       if (moving) {
         camera.getWorldDirection(forward);
-        travel.addScaledVector(forward, Math.min(dt, .1) * 6);
+        travel.addScaledVector(forward, Math.min(dt, .1) * 3);
         snapToGrid();
         aimCamera();
       }
