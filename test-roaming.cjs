@@ -70,11 +70,15 @@ const { chromium } = require('playwright');
     // Read the real shader's output in a tiny isolated target, without particle overlap.
     const tintPixels=await page.evaluate(async()=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
+      const {createPointInfluence}=await import('./point-influence.js?v=1');
+      const field=createPointInfluence(50,26), c=-26+25*52/49;
+      field.update({x:c,y:c,z:c},3);
       const renderer=window.qaRenderer, material=window.qaCloud.material.clone();
       material.blending=THREE.NoBlending; material.defaultAttributeValues.aDetail=[0];
       const geometry=new THREE.BufferGeometry();
       geometry.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0],3));
       geometry.setAttribute('aSeed',new THREE.Float32BufferAttribute([.5],1));
+      geometry.setAttribute('aPlayerTint',new THREE.Float32BufferAttribute([0],1));
       const scene=new THREE.Scene(), point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
       const camera=new THREE.OrthographicCamera(-1,1,1,-1,.1,100), target=new THREE.WebGLRenderTarget(32,32);
       const previousTarget=renderer.getRenderTarget(), clearColor=renderer.getClearColor(new THREE.Color()), clearAlpha=renderer.getClearAlpha();
@@ -84,6 +88,8 @@ const { chromium } = require('playwright');
         camera.position.set(x,y,20);camera.lookAt(x,y,0);
         material.uniforms.uRoam.value=1;material.uniforms.uTime.value=time;
         material.uniforms.uPlayer.value.set(near?0:100,y,0);
+        geometry.attributes.aPlayerTint.setX(0,near?field.values[((25+Math.round(x/(52/49)))*50+25)*50+25]:0);
+        geometry.attributes.aPlayerTint.needsUpdate=true;
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
         const rgba=new Uint8Array(4);renderer.readRenderTargetPixels(target,16,16,1,1,rgba);return Array.from(rgba);
       }
@@ -150,6 +156,15 @@ const { chromium } = require('playwright');
     assert.ok(speed>1 && speed<3.5,`Expected slower 3-unit/s movement, measured ${speed}`);
     assert.ok(moved.player.reduce((sum,v,i)=>sum+(v-startMove.player[i])*startMove.direction[i],0)>2);
     await page.screenshot({path:path.join(output,'moving.png')});
+    const trail=await page.evaluate(p=>{
+      const cell=p.map(v=>Math.round((v+26)/(52/49))),index=(cell[0]*50+cell[1])*50+cell[2];
+      return {index,value:window.qaCloud.geometry.attributes.aPlayerTint.getX(index),time:window.roamSample.time};
+    },startMove.player);
+    assert.ok(trail.value>0.01,'Departed cells retain colour');
+    await page.waitForFunction(t=>window.roamSample.time>t+.7,trail.time);
+    const fading=await page.evaluate(i=>window.qaCloud.geometry.attributes.aPlayerTint.getX(i),trail.index);
+    assert.ok(fading>0 && fading<trail.value,'Trail fades gradually rather than disappearing');
+    await page.screenshot({path:path.join(output,'fading-trail.png')});
     await page.waitForFunction(()=>window.roamSample.player.some(v=>Math.abs(v)>25.99),null,{timeout:45000});
     await page.keyboard.up('w');
     const stopped=await page.evaluate(()=>window.roamSample);

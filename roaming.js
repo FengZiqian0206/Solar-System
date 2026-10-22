@@ -121,6 +121,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     get active() { return active; },
     get zoom() { return 78 / distance; },
     position,
+    influencePosition: travel,
     wheel(delta) {
       distance = Math.max(6, Math.min(90, distance * (delta < 0 ? .9 : 1.1)));
     },
