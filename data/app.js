@@ -1,6 +1,7 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-3';
+import { createRoaming } from './roaming.js?v=grid-roam-6';
+import { createPointInfluence } from './point-influence.js?v=1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -21,7 +22,7 @@ let renderer,scene,camera,cloud,geometry,material,simDays=0,daysPerSecond=10,pau
 const bodies=[];
 const focusOffset=new THREE.Vector3();
 let detailCloud,detailGeometry;
-let roaming;
+let roaming, pointInfluence;
 const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=BODY_STEP_50/2, BODY_STEP_150=BODY_STEP_50/3, DETAIL_CAPACITY=16000;
 
 // Pack dense-mode bodies into adjacent fine-grid cells; every position stays on the global lattice.
@@ -83,7 +84,7 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint;
+attribute float aSeed,aDetail,aPlayerTint; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
@@ -104,8 +105,8 @@ void main(){
  if(uRoam>.5)gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio,(bodyDepth>0.?48.:14.)*uPixelRatio);
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
- // Nearby cells share the player's colour strongly, then fade toward the boundary.
- vPlayerTint=uRoam*.95*(1.-smoothstep(1.8,3.5,playerDistance/(2.*uHalf/49.)));
+ // Per-cell temporal influence: quick colour arrival, deliberately slower departure.
+ vPlayerTint=uRoam*aPlayerTint;
  if(vPlayer>.5)gl_PointSize=18.*uPixelRatio;
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
@@ -121,6 +122,8 @@ function rebuild(){
   const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===150?BODY_STEP_150:n===100?BODY_STEP_100:BODY_STEP_50,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
+  pointInfluence=createPointInfluence(n,half);
+  geometry.setAttribute('aPlayerTint',new THREE.BufferAttribute(pointInfluence.values,1).setUsage(THREE.DynamicDrawUsage));
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:1},uBeltBoost:{value:gridSize===150?1:0},uZoom:{value:zoom},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()},uShadowDirs:{value:Array.from({length:9},()=>new THREE.Vector3())}}});
   material.defaultAttributeValues.aDetail=[0];
   material.uniforms.uRoam={value:0};
@@ -145,7 +148,7 @@ function init(){
     error.code='SHADER_FAILED';throw error;
   };
   renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);
-  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onStart:()=>{drag=null;labels.replaceChildren();leaders.replaceChildren()}});
+  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onStart:()=>{drag=null;pointInfluence.reset();geometry.attributes.aPlayerTint.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
   renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
@@ -154,7 +157,7 @@ function frame(now){
   material.uniforms.uTime.value=now/1000;
   material.uniforms.uZoom.value=Math.max(1,roaming.active?roaming.zoom:zoom);
   material.uniforms.uRoam.value=roaming.active?1:0;
-  if(roaming.active){cloud.rotation.set(0,0,0);cloud.position.set(0,0,0);roaming.update(dt);material.uniforms.uPlayer.value.copy(roaming.position)}
+  if(roaming.active){cloud.rotation.set(0,0,0);cloud.position.set(0,0,0);roaming.update(dt);material.uniforms.uPlayer.value.copy(roaming.position);if(pointInfluence.update(roaming.influencePosition,dt))geometry.attributes.aPlayerTint.needsUpdate=true}
   else {cloud.rotation.set(pitch,yaw,0);const focus=bodies[followPlanet>=0?followPlanet+1:0];focusOffset.copy(focus.pos).applyEuler(cloud.rotation).multiplyScalar(-1);cloud.position.copy(focusOffset);camera.position.set(0,0,78);camera.zoom=zoom}
   camera.updateProjectionMatrix();renderer.render(scene,camera);if(!roaming.active)updateLabels();
   $('#sceneInfo').textContent=`CUBIC LATTICE  ${gridSize}³   ·   ${(gridSize**3).toLocaleString()} POINTS   ·   ${(simDays/365.256).toFixed(2)} EARTH YEARS`;
