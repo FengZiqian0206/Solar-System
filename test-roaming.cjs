@@ -28,6 +28,8 @@ const { chromium } = require('playwright');
     await page.mouse.move(650, 280);
     assert.equal(await page.locator('#rainbowCursor span').textContent(), 'Double-click to start');
     assert.equal(await page.locator('#rainbowCursor').isVisible(), true);
+    assert.equal(await page.locator('#rainbowCursor').evaluate(el=>getComputedStyle(el).width), '16px');
+    assert.equal(await page.locator('#rainbowCursor i').evaluate(el=>getComputedStyle(el).backgroundImage), 'none');
     const timing = await page.locator('#rainbowCursor span').evaluate(el => {
       const a = el.getAnimations()[0];
       const {duration, delay} = a.effect.getTiming();
@@ -46,6 +48,20 @@ const { chromium } = require('playwright');
       THREE.PerspectiveCamera.prototype.lookAt = function(...args) {
         lookAt.apply(this,args); window.cameraSample=this.position.toArray();
       };
+      const afterRender = THREE.Points.prototype.onAfterRender, direction = new THREE.Vector3();
+      THREE.Points.prototype.onAfterRender = function(renderer,scene,camera,...args) {
+        afterRender.call(this,renderer,scene,camera,...args);
+        const cloud=this;
+        if(!cloud.material?.uniforms?.uPlayer)return;
+        const u=cloud.material.uniforms, player=u.uPlayer.value.toArray(), step=52/49;
+        const ijk=player.map(v=>Math.round((v+26)/step)), index=(ijk[0]*50+ijk[1])*50+ijk[2];
+        const actual=new THREE.Vector3().fromBufferAttribute(cloud.geometry.attributes.position,index).toArray();
+        window.qaCloud=cloud;
+        window.roamSample={player,earth:u.uBodies.value[3].toArray().slice(0,3),time:u.uTime.value,active:u.uRoam.value,
+          direction:camera.getWorldDirection(direction).toArray(),count:cloud.geometry.attributes.position.count,
+          matches:player.every((v,i)=>Math.abs(v-actual[i])<.00001),calls:renderer.info.render.calls,points:renderer.info.render.points};
+        if(u.uRoam.value && (!window.roamSample.matches || player.some(v=>Math.abs(v)>26.00001))) window.gridFailure=true;
+      };
     });
     // Header double-click proves the gesture also works outside the canvas.
     await page.locator('h1').dblclick();
@@ -54,7 +70,16 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('#labels').isVisible(), false);
     assert.equal(await page.locator('#leaders').isVisible(), false);
     assert.equal(await page.locator('#rainbowCursor').isVisible(), false);
-    await page.waitForFunction(() => window.cameraSample);
+    await page.waitForFunction(() => window.cameraSample && window.roamSample?.active);
+    const entry=await page.evaluate(()=>window.roamSample);
+    assert.equal(entry.matches,true); assert.equal(entry.count,125000); assert.equal(entry.calls,1); assert.equal(entry.points,125000);
+    assert.ok(entry.player.every((v,i)=>Math.abs(v-entry.earth[i])<=52/49/2+.001));
+    const entryCamera=await page.evaluate(()=>window.cameraSample);
+    assert.ok(Math.hypot(...entryCamera.map((v,i)=>v-entry.player[i]))>31);
+    await page.evaluate(()=>{window.gridBefore=window.qaCloud.geometry.attributes.position.array.slice();document.querySelector('#pause').click();});
+    await page.waitForFunction(earth=>window.roamSample.earth.some((v,i)=>Math.abs(v-earth[i])>.2),entry.earth);
+    assert.deepEqual(await page.evaluate(()=>window.roamSample.player),entry.player);
+    await page.evaluate(()=>document.querySelector('#pause').click());
     await page.screenshot({path:path.join(output,'roaming-entry.png')});
     const before = await page.evaluate(() => window.cameraSample);
     await page.mouse.move(800, 380, {steps:8});
@@ -63,6 +88,26 @@ const { chromium } = require('playwright');
     await page.mouse.wheel(0,-450);
     await page.waitForFunction(previous => window.cameraSample.some((v,i) => Math.abs(v-previous[i])>.1), rotated);
     await page.screenshot({path:path.join(output,'roaming.png')});
+    const startMove=await page.evaluate(()=>window.roamSample);
+    await page.keyboard.down('w');
+    await page.waitForFunction(start=>Math.hypot(...window.roamSample.player.map((v,i)=>v-start[i]))>3,startMove.player);
+    const moved=await page.evaluate(()=>window.roamSample);
+    assert.ok(moved.player.reduce((sum,v,i)=>sum+(v-startMove.player[i])*startMove.direction[i],0)>2);
+    await page.screenshot({path:path.join(output,'moving.png')});
+    await page.waitForFunction(()=>window.roamSample.player.some(v=>Math.abs(v)>25.99),null,{timeout:25000});
+    await page.keyboard.up('w');
+    const stopped=await page.evaluate(()=>window.roamSample);
+    await page.waitForFunction(t=>window.roamSample.time>t+.4,stopped.time);
+    assert.deepEqual(await page.evaluate(()=>window.roamSample.player),stopped.player);
+    assert.equal(await page.evaluate(()=>!!window.gridFailure),false);
+    assert.equal(await page.evaluate(()=>window.gridBefore.every((v,i)=>v===window.qaCloud.geometry.attributes.position.array[i])),true);
+    // A lost focus must clear W even if no keyup arrives.
+    await page.keyboard.down('w');
+    await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+    const blurred=await page.evaluate(()=>window.roamSample);
+    await page.waitForFunction(t=>window.roamSample.time>t+.4,blurred.time);
+    assert.deepEqual(await page.evaluate(()=>window.roamSample.player),blurred.player);
+    await page.keyboard.up('w');
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !document.body.classList.contains('is-roaming') && !document.fullscreenElement);
     assert.equal(await page.locator('#labels').isVisible(), true);
@@ -97,6 +142,6 @@ const { chromium } = require('playwright');
     await page.locator('#chartToggle').click();
     assert.equal(await page.locator('#planetCharts svg').count(), 1);
     assert.deepEqual(errors, []); assert.deepEqual(failed, []);
-    console.log(JSON.stringify({passed:true,densities:[50],checks:['fixed density','cursor','5-second fade','anywhere double-click','fullscreen','labels hidden','mouse-look without drag','wheel','Escape','exit button','permission failures','chart regression'],screenshots:output}));
+    console.log(JSON.stringify({passed:true,densities:[50],checks:['fixed density','16px flat cursor','5-second fade','fullscreen','labels hidden','mouse-look','wheel','32-unit camera distance','Earth spawn without following','W forward','grid alignment','boundary clamp','unchanged geometry','keyup and blur stop','Escape','exit button','permission failures','chart regression'],render:{calls:entry.calls,points:entry.points},screenshots:output}));
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
