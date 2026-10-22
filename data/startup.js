@@ -27,12 +27,12 @@
   }
   const timeout = setTimeout(() => showFailure('资源加载超时，请检查网络后重试。 · Loading timed out. Please retry.'), 20000);
   // Resolve against the page, not the classic script's possibly opaque origin.
-  const appUrl = new URL('./app.js?v=planet-spectrum-1', document.baseURI).href;
+  const appUrl = new URL('./app.js?v=roam-1', document.baseURI).href;
   import(appUrl).then(() => {
     clearTimeout(timeout);
     panel.hidden = true;
     panel.style.display = 'none';
-    controls.forEach(control => control.disabled = false);
+    controls.forEach(control => control.disabled = control.id === 'density');
     status.textContent = '● 运行中 · RUNNING';
   }).catch(error => {
     clearTimeout(timeout);
