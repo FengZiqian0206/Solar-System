@@ -129,7 +129,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       aimCamera();
       if (moving) {
         camera.getWorldDirection(forward);
-        travel.addScaledVector(forward, Math.min(dt, .1) * 3);
+        travel.addScaledVector(forward, Math.min(dt, .1) * 4.5);
         snapToGrid();
         aimCamera();
       }
