@@ -22,7 +22,7 @@ export function createPointInfluence(size, half) {
       let changed=false;
       for(const index of active) {
         const target=targets.get(index)||0, previous=values[index];
-        const tau=target>previous?.22:1.6;
+        const tau=target>previous?.22:2.4;
         const next=previous+(target-previous)*(1-Math.exp(-Math.max(0,dt)/tau));
         values[index]=next<.001&&target===0?0:next;
         if(values[index]===0)active.delete(index);

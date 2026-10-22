@@ -70,7 +70,7 @@ const { chromium } = require('playwright');
     // Read the real shader's output in a tiny isolated target, without particle overlap.
     const tintPixels=await page.evaluate(async()=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
-      const {createPointInfluence}=await import('./point-influence.js?v=1');
+      const {createPointInfluence}=await import('./point-influence.js?v=2');
       const field=createPointInfluence(50,26), c=-26+25*52/49;
       field.update({x:c,y:c,z:c},3);
       const renderer=window.qaRenderer, material=window.qaCloud.material.clone();
@@ -111,7 +111,7 @@ const { chromium } = require('playwright');
     const overview=await page.evaluate(()=>window.qaCloud.rotation.toArray());
     await page.mouse.down(); await page.mouse.move(700,280,{steps:5}); await page.mouse.up();
     const overviewRight=await page.evaluate(()=>window.qaCloud.rotation.toArray());
-    assert.ok(overviewRight[1]<overview[1]); assert.ok(Math.abs(overviewRight[0]-overview[0])<.001);
+    assert.ok(overviewRight[1]>overview[1]); assert.ok(Math.abs(overviewRight[0]-overview[0])<.001);
     await page.mouse.down(); await page.mouse.move(700,320,{steps:5}); await page.mouse.up();
     assert.ok(await page.evaluate(y=>window.qaCloud.rotation.x>y,overviewRight[0]));
     await page.locator('#resetView').click();
@@ -153,7 +153,7 @@ const { chromium } = require('playwright');
     const moved=await page.evaluate(()=>window.roamSample);
     const movedCamera=await page.evaluate(()=>window.cameraSample);
     const speed=Math.hypot(...movedCamera.map((v,i)=>v-startCamera[i]))/(moved.time-startMove.time);
-    assert.ok(speed>1 && speed<3.5,`Expected slower 3-unit/s movement, measured ${speed}`);
+    assert.ok(speed>3 && speed<4.8,`Expected faster 4.5-unit/s movement, measured ${speed}`);
     assert.ok(moved.player.reduce((sum,v,i)=>sum+(v-startMove.player[i])*startMove.direction[i],0)>2);
     await page.screenshot({path:path.join(output,'moving.png')});
     const trail=await page.evaluate(p=>{

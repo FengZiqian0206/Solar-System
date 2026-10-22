@@ -13,7 +13,7 @@ const assert=require('node:assert/strict');
   field.update(null,.5);
   assert.ok(field.values[index(26)]>before*.7 && field.values[index(26)]<before,'Slow departure');
   field.update(null,2);
-  assert.ok(field.values[index(26)]>0 && field.values[index(26)]<before*.3);
+  assert.ok(field.values[index(26)]>before*.3 && field.values[index(26)]<before*.4);
   field.update(null,15); assert.ok(field.values.every(v=>v===0));
   field.reset();field.update({...center,x:c+step*.45},.1);
   assert.ok(field.values[index(28)]>0,'Next cells begin colouring before a grid snap');
