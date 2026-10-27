@@ -14,9 +14,50 @@ const { chromium } = require('playwright');
   const url = process.argv[2] || 'http://127.0.0.1:4193/';
   const output = fs.mkdtempSync(path.join(os.tmpdir(), 'solar-roaming-'));
   try {
+    await page.addInitScript(()=>{
+      window.qaInitialLockRequests=0;window.qaInitialFullscreenRequests=[];
+      const request=Element.prototype.requestPointerLock;
+      Element.prototype.requestPointerLock=function(...args){window.qaInitialLockRequests++;return request.apply(this,args);};
+      const fullscreen=Element.prototype.requestFullscreen;
+      Element.prototype.requestFullscreen=function(...args){window.qaInitialFullscreenRequests.push({active:navigator.userActivation.isActive});return fullscreen.apply(this,args);};
+      const observer=new MutationObserver(()=>{
+        if(document.body?.classList.contains('is-roaming')){window.qaFirstRoam={splashPresent:!!document.querySelector('#splash')};observer.disconnect();}
+      });
+      observer.observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+      document.addEventListener('DOMContentLoaded',async()=>{
+        const {THREE}=await import(new URL('./renderer-support.js?v=visual-balance-1',location.href).href),afterRender=THREE.Points.prototype.onAfterRender;
+        THREE.Points.prototype.onAfterRender=function(renderer,scene,camera,...args){
+          afterRender.call(this,renderer,scene,camera,...args);
+          const u=this.material?.uniforms;
+          if(!u?.uInfluenceCenter||!u.uRoam.value)return;
+          const first=!window.qaAutoEntry;
+          window.qaAutoEntry={camera:camera.position.toArray(),travel:u.uInfluenceCenter.value.toArray(),time:u.uTime.value,splashPresent:!!document.querySelector('#splash')};
+          if(first)console.log('QA_INITIAL_ROAM_FRAME_READY');
+        };
+      });
+    });
+    // Runtime evaluation can grant Playwright's synthetic activation; await a page-owned signal first.
+    const initialFrame=page.waitForEvent('console',{predicate:message=>message.text()==='QA_INITIAL_ROAM_FRAME_READY'});
     await page.goto(url);
-    await page.waitForFunction(() => document.querySelector('#status').textContent.includes('RUNNING'));
-    await page.locator('#splash').waitFor({state:'detached'});
+    await initialFrame;
+    const automatic=await page.evaluate(()=>window.qaAutoEntry);
+    assert.equal(automatic.splashPresent,false,'Initial roaming starts after the splash has gone');
+    assert.equal(await page.evaluate(()=>window.qaFirstRoam.splashPresent),false);
+    assert.ok(Math.abs(Math.hypot(...automatic.camera.map((v,i)=>v-automatic.travel[i]))-48)<.01);
+    assert.equal(await page.evaluate(()=>document.fullscreenElement),null,'Automatic desktop entry uses CSS fullscreen without a gesture');
+    assert.equal(await page.evaluate(()=>document.pointerLockElement),null);
+    assert.equal(await page.evaluate(()=>window.qaInitialLockRequests),0,'No pointer lock request without user activation');
+    assert.ok(await page.evaluate(()=>window.qaInitialFullscreenRequests.every(request=>!request.active)),'Automatic fullscreen requests have no user activation');
+    assert.equal(await page.locator('#roamHud').isVisible(),true);
+    await page.screenshot({path:path.join(output,'automatic-entry.png')});
+    await page.mouse.click(650,280);
+    await page.waitForFunction(()=>document.fullscreenElement?.id==='hologram'&&document.pointerLockElement?.id==='viewport');
+    assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true,'First real interaction upgrades the existing session');
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement&&!document.pointerLockElement);
+    const exitedTime=await page.evaluate(()=>window.qaAutoEntry.time);
+    await page.waitForFunction(t=>performance.now()/1000>t+.5,exitedTime);
+    assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),false,'Exit stays in overview until the next manual entry');
     assert.equal(await page.locator('#density').isDisabled(), true);
     assert.equal(await page.locator('#density').inputValue(), '50');
     assert.equal(await page.locator('#pointCount').textContent(), '125,000');
@@ -77,7 +118,7 @@ const { chromium } = require('playwright');
     // Read the real shader's output in a tiny isolated target, without particle overlap.
     const tintPixels=await page.evaluate(async()=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
-      const {createPointInfluence}=await import('./point-influence.js?v=4');
+      const {createPointInfluence}=await import('./point-influence.js?v=5');
       const field=createPointInfluence(50,26), c=-26+25*52/49;
       field.update({x:c,y:c,z:c},3);
       const renderer=window.qaRenderer, material=window.qaCloud.material.clone();
@@ -207,7 +248,7 @@ const { chromium } = require('playwright');
     assert.ok(entry.player.every((v,i)=>Math.abs(v-entry.earth[i])<=52/49/2+.001));
     const entryCamera=await page.evaluate(()=>window.cameraSample);
     const entryDistance=Math.hypot(...entryCamera.map((v,i)=>v-entry.player[i]));
-    assert.ok(entryDistance>39 && entryDistance<41,'Camera starts 40 units behind the player');
+    assert.ok(entryDistance>47 && entryDistance<49,'Camera starts 48 units behind the player');
     assert.equal(await page.locator('#roamForward').textContent(),'W');
     assert.equal(await page.locator('#roamForward').getAttribute('aria-pressed'),'false');
     await page.evaluate(()=>{window.gridBefore=window.qaCloud.geometry.attributes.position.array.slice();document.querySelector('#pause').click();});
@@ -368,6 +409,6 @@ const { chromium } = require('playwright');
     await page.locator('#chartToggle').click();
     assert.equal(await page.locator('#planetCharts svg').count(), 1);
     assert.deepEqual(errors, []); assert.deepEqual(failed, []);
-    console.log(JSON.stringify({passed:true,densities:[50],checks:['fixed density','16px flat cursor','70% opacity and 4-second colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','40-unit camera distance','Earth spawn without following','6-unit W forward / composed keyboard and button hold','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],entryDistance,movementSpeed:speed,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
+    console.log(JSON.stringify({passed:true,densities:[50],checks:['automatic entry after splash without gesture','first interaction upgrades native fullscreen and pointer lock','exit stays in overview / manual re-entry','fixed density','16px flat cursor','70% opacity and 4-second colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','48-unit camera distance','Earth spawn without following','6-unit W forward / composed keyboard and button hold','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],entryDistance,movementSpeed:speed,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
