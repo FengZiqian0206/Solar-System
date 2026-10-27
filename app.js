@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-10';
+import { createRoaming } from './roaming.js?v=grid-roam-11';
 import { createPointInfluence } from './point-influence.js?v=4';
 
 const PLANETS = [
