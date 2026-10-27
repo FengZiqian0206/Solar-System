@@ -19,22 +19,32 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   // Motion is integrated continuously, but only an existing lattice vertex is highlighted.
   // Nearby points can render off-grid; the player and base lattice stay on-grid.
   const position = new THREE.Vector3(), travel = new THREE.Vector3();
-  const offset = new THREE.Vector3(), target = new THREE.Vector3(), up = new THREE.Vector3(), forward = new THREE.Vector3();
+  const offset = new THREE.Vector3(), forward = new THREE.Vector3(), orbitRotation = new THREE.Euler(0,0,0,'YXZ');
   let active = false, pending = false, locked = false, moving = false, yaw = Math.PI / 4, pitch = .24, distance = 32;
-  let pointer = null, noticeTimer;
+  let pointer = null, noticeTimer, lockPending = false;
 
   function snapToGrid() {
     travel.clampScalar(-half, half);
     position.copy(travel).addScalar(half).divideScalar(step).round().multiplyScalar(step).addScalar(-half);
   }
   function aimCamera() {
-    offset.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(distance);
+    // Orient the orbit directly, so passing a pole never depends on world-up lookAt.
+    camera.quaternion.setFromEuler(orbitRotation.set(-pitch,yaw,0,'YXZ'));
+    offset.set(0,0,distance).applyQuaternion(camera.quaternion);
     camera.position.copy(travel).add(offset);
     camera.zoom = 1;
-    camera.lookAt(travel);
-    up.set(0, 1, 0).applyQuaternion(camera.quaternion);
-    target.copy(travel).addScaledVector(up, distance * .10);
-    camera.lookAt(target);
+    camera.rotateX(Math.atan(.10));
+  }
+  function rotate(dx,dy) {
+    yaw = (yaw - Math.max(-120,Math.min(120,dx))*.002) % (Math.PI*2);
+    pitch = (pitch + Math.max(-120,Math.min(120,dy))*.002) % (Math.PI*2);
+  }
+  function requestLock() {
+    if(lockPending || document.pointerLockElement===viewport)return Promise.resolve();
+    lockPending=true;
+    try {
+      return Promise.resolve(viewport.requestPointerLock?.()).catch(()=>{}).finally(()=>{lockPending=false;});
+    } catch (_) { lockPending=false;return Promise.resolve(); }
   }
 
   function notify(text) {
@@ -57,7 +67,8 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if (active || pending || !getEarth()) return;
     pending = true;
     try {
-      // Called directly by double-click: retain the browser's user-activation permission.
+      // Pointer lock must be requested before fullscreen consumes this gesture's activation.
+      const lockAttempt=requestLock();
       if (document.fullscreenElement !== hologram) await hologram.requestFullscreen();
       if (document.fullscreenElement !== hologram) return;
       onStart();
@@ -68,27 +79,29 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       document.body.classList.add('is-roaming');
       hologram.classList.add('is-roaming');
       notice.textContent = '';
-      // Pointer lock is optional; ordinary mouse movement still works if it is refused.
-      try { await viewport.requestPointerLock?.(); } catch (_) {}
+      await lockAttempt;
     } catch (_) {
       notify('无法进入全屏，请再次双击。 · Full screen unavailable. Double-click to retry.');
-    } finally { pending = false; }
+    } finally {
+      pending = false;
+      if(!active && document.pointerLockElement===viewport)document.exitPointerLock();
+    }
   }
   document.addEventListener('dblclick', event => {
     if (event.target.closest('#roamExit')) return;
     event.preventDefault();
     enter();
   });
+  document.addEventListener('mousemove', event => {
+    if(!active)return;
+    const dx = document.pointerLockElement === viewport ? event.movementX : pointer ? event.clientX - pointer.x : 0;
+    const dy = document.pointerLockElement === viewport ? event.movementY : pointer ? event.clientY - pointer.y : 0;
+    pointer = { x: event.clientX, y: event.clientY };
+    rotate(dx,dy);
+  });
+  viewport.addEventListener('pointerdown',()=>{if(active && document.pointerLockElement!==viewport)requestLock();});
   document.addEventListener('pointermove', event => {
-    if (event.pointerType !== 'mouse') return;
-    if (active) {
-      const dx = document.pointerLockElement === viewport ? event.movementX : pointer ? event.clientX - pointer.x : 0;
-      const dy = document.pointerLockElement === viewport ? event.movementY : pointer ? event.clientY - pointer.y : 0;
-      pointer = { x: event.clientX, y: event.clientY };
-      yaw -= Math.max(-120, Math.min(120, dx)) * .002;
-      pitch = Math.max(-1.35, Math.min(1.35, pitch + Math.max(-120, Math.min(120, dy)) * .002));
-      return;
-    }
+    if (event.pointerType !== 'mouse' || active) return;
     cursor.style.left = `${event.clientX}px`;
     cursor.style.top = `${event.clientY}px`;
     cursor.classList.toggle('tip-left', event.clientX > innerWidth - 180);
@@ -107,8 +120,8 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   });
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement === viewport) {
-      if (!active) { document.exitPointerLock(); return; }
-      locked = true;
+      if (!active && !pending) { document.exitPointerLock(); return; }
+      locked = true;pointer = null;
     } else if (active && locked) leave();
   });
   document.addEventListener('keydown', event => {
@@ -126,6 +139,12 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       distance = Math.max(6, Math.min(90, distance * (delta < 0 ? .9 : 1.1)));
     },
     update(dt) {
+      // If lock is refused, edge turning still permits continuous orbit without dragging.
+      if(document.pointerLockElement!==viewport && pointer) {
+        const edgeX=Math.max(0,(pointer.x-innerWidth+24)/24)-Math.max(0,(24-pointer.x)/24);
+        const edgeY=Math.max(0,(pointer.y-innerHeight+24)/24)-Math.max(0,(24-pointer.y)/24);
+        rotate(Math.max(-1,Math.min(1,edgeX))*dt*400,Math.max(-1,Math.min(1,edgeY))*dt*400);
+      }
       aimCamera();
       if (moving) {
         camera.getWorldDirection(forward);
