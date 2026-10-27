@@ -46,22 +46,29 @@ const { chromium } = require('playwright');
     // Instrument only this isolated test page, without adding production debug globals.
     await page.evaluate(async () => {
       const {THREE} = await import('./renderer-support.js?v=visual-balance-1');
-      const lookAt = THREE.PerspectiveCamera.prototype.lookAt;
-      THREE.PerspectiveCamera.prototype.lookAt = function(...args) {
-        lookAt.apply(this,args); window.cameraSample=this.position.toArray();
-      };
+      document.addEventListener('keydown',event=>{
+        if(event.code==='KeyW' && !event.repeat && window.roamSample?.active)window.qaMovement={active:true,distance:0,seconds:0,time:window.roamSample.time,position:window.cameraSample.slice()};
+      });
+      document.addEventListener('keyup',event=>{if(event.code==='KeyW' && window.qaMovement)window.qaMovement.active=false;});
       const afterRender = THREE.Points.prototype.onAfterRender, direction = new THREE.Vector3();
       THREE.Points.prototype.onAfterRender = function(renderer,scene,camera,...args) {
         afterRender.call(this,renderer,scene,camera,...args);
         const cloud=this;
         if(!cloud.material?.uniforms?.uPlayer || cloud.geometry.attributes.position.count!==125000)return;
         const u=cloud.material.uniforms, player=u.uPlayer.value.toArray(), step=52/49;
+        const motion=window.qaMovement;
+        if(motion?.active){
+          motion.distance+=Math.hypot(...camera.position.toArray().map((v,i)=>v-motion.position[i]));
+          motion.seconds+=Math.max(0,Math.min(.1,u.uTime.value-motion.time));
+          motion.position=camera.position.toArray();motion.time=u.uTime.value;
+        }
         const ijk=player.map(v=>Math.round((v+26)/step)), index=(ijk[0]*50+ijk[1])*50+ijk[2];
         const actual=new THREE.Vector3().fromBufferAttribute(cloud.geometry.attributes.position,index).toArray();
         window.qaCloud=cloud;
         window.qaRenderer=renderer;
+        window.cameraSample=camera.position.toArray();
         window.roamSample={player,earth:u.uBodies.value[3].toArray().slice(0,3),time:u.uTime.value,active:u.uRoam.value,
-          direction:camera.getWorldDirection(direction).toArray(),count:cloud.geometry.attributes.position.count,
+          direction:camera.getWorldDirection(direction).toArray(),quaternion:camera.quaternion.toArray(),count:cloud.geometry.attributes.position.count,
           matches:player.every((v,i)=>Math.abs(v-actual[i])<.00001),calls:renderer.info.render.calls,points:renderer.info.render.points};
         if(u.uRoam.value && (!window.roamSample.matches || player.some(v=>Math.abs(v)>26.00001))) window.gridFailure=true;
       };
@@ -90,6 +97,7 @@ const { chromium } = require('playwright');
         camera.position.set(x,y,20);camera.lookAt(x,y,0);
         material.uniforms.uRoam.value=1;material.uniforms.uTime.value=time;
         material.uniforms.uPlayer.value.set(near?0:100,y,0);
+        material.uniforms.uInfluenceCenter.value.set(near?0:100,y,0);
         geometry.attributes.aPlayerTint.setX(0,near?field.values[((25+Math.round(x/(52/49)))*50+25)*50+25]:0);
         geometry.attributes.aPlayerTint.needsUpdate=true;
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
@@ -111,7 +119,35 @@ const { chromium } = require('playwright');
     assert.deepEqual(tintPixels.far,tintPixels.farBase);
     assert.ok(tintPixels.near.slice(0,3).every((v,i)=>Math.abs(v-tintPixels.changed[i])<15));
     assert.ok(tintPixels.space[3]>125 && tintPixels.space[3]>tintPixels.spaceBase[3]+60);
-    assert.ok(tintPixels.coreArea>tintPixels.baseArea*1.2,'Core neighbour points visibly enlarged');
+    // A settled coloured group uses one continuous radial size curve, including its selected point.
+    const radialSizes=await page.evaluate(async()=>{
+      const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
+      const renderer=window.qaRenderer,material=window.qaCloud.material.clone();
+      material.blending=THREE.NoBlending;material.defaultAttributeValues.aDetail=[0];material.defaultAttributeValues.aPlayerOffset=[0,0,0];
+      const geometry=new THREE.BufferGeometry();
+      geometry.setAttribute('position',new THREE.Float32BufferAttribute([0,12,0],3));
+      geometry.setAttribute('aSeed',new THREE.Float32BufferAttribute([.5],1));
+      geometry.setAttribute('aPlayerTint',new THREE.Float32BufferAttribute([.95],1));
+      const scene=new THREE.Scene(),point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
+      const camera=new THREE.OrthographicCamera(-4,4,4,-4,.1,100),target=new THREE.WebGLRenderTarget(64,64);
+      const previousTarget=renderer.getRenderTarget(),clearColor=renderer.getClearColor(new THREE.Color()),clearAlpha=renderer.getClearAlpha();
+      function sample(d){
+        const x=d*52/49;geometry.attributes.position.setXYZ(0,x,12,0);geometry.attributes.position.needsUpdate=true;
+        material.uniforms.uRoam.value=1;material.uniforms.uTime.value=0;material.uniforms.uPlayer.value.set(0,12,0);material.uniforms.uInfluenceCenter.value.set(0,12,0);
+        camera.position.set(x,12,20);camera.lookAt(x,12,0);
+        renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
+        const pixels=new Uint8Array(64*64*4);renderer.readRenderTargetPixels(target,0,0,64,64,pixels);
+        let area=0,minX=64,maxX=-1;
+        for(let y=0;y<64;y++)for(let px=0;px<64;px++)if(pixels[(y*64+px)*4+3]>0){area++;minX=Math.min(minX,px);maxX=Math.max(maxX,px);}
+        return {area,width:maxX-minX+1};
+      }
+      try{return {centre:sample(0),almostCentre:sample(.05),inner:sample(.75),outer:sample(1.5),edge:sample(1.9),edgeEnd:sample(2)};}
+      finally{renderer.setRenderTarget(previousTarget);renderer.setClearColor(clearColor,clearAlpha);geometry.dispose();material.dispose();target.dispose();}
+    });
+    assert.ok(radialSizes.centre.width>=17 && radialSizes.centre.width<=19,'Centre follows the regular 18px radial maximum');
+    assert.ok(Math.abs(radialSizes.centre.area-radialSizes.almostCentre.area)<=radialSizes.centre.area*.1,'No selected-point size jump');
+    assert.ok(radialSizes.centre.area>radialSizes.inner.area && radialSizes.inner.area>radialSizes.outer.area,'Point size increases continuously towards the centre');
+    assert.ok(radialSizes.outer.area>radialSizes.edge.area && radialSizes.edge.area>=radialSizes.edgeEnd.area && radialSizes.edgeEnd.area>0,'Coloured outer points keep tapering down');
     // Measure actual production-shader movement independently of colour and point size.
     const repulsionPixels=await page.evaluate(async()=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
@@ -129,6 +165,7 @@ const { chromium } = require('playwright');
         geometry.attributes.position.setXYZ(0,x,12,0);geometry.attributes.position.needsUpdate=true;
         geometry.attributes.aPlayerOffset.setXYZ(0,offset,0,0);geometry.attributes.aPlayerOffset.needsUpdate=true;
         material.uniforms.uRoam.value=roam;material.uniforms.uTime.value=0;material.uniforms.uPlayer.value.set(0,12,0);
+        material.uniforms.uInfluenceCenter.value.set(0,12,0);
         camera.position.set(x,12,20);camera.lookAt(x,12,0);
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
         const pixels=new Uint8Array(64*64*4);renderer.readRenderTargetPixels(target,0,0,64,64,pixels);
@@ -159,6 +196,7 @@ const { chromium } = require('playwright');
     // Header double-click proves the gesture also works outside the canvas.
     await page.locator('h1').dblclick();
     await page.waitForFunction(() => document.body.classList.contains('is-roaming'));
+    await page.waitForFunction(() => document.pointerLockElement?.id==='viewport');
     assert.equal(await page.evaluate(() => document.fullscreenElement?.id), 'hologram');
     assert.equal(await page.locator('#labels').isVisible(), false);
     assert.equal(await page.locator('#leaders').isVisible(), false);
@@ -186,6 +224,20 @@ const { chromium } = require('playwright');
     assert.equal(repulsion.finite,true);assert.equal(repulsion.count,125000);assert.equal(repulsion.itemSize,3);
     assert.ok(repulsion.moved>0 && repulsion.maxDistance>0.1 && repulsion.maxDistance<=1.8*52/49+.001,'Real roaming buffer contains bounded outward offsets');
     await page.screenshot({path:path.join(output,'roaming-entry.png')});
+    // Real locked movement must continue past the former pitch clamp and the poles.
+    const poleStart=await page.evaluate(()=>window.roamSample.quaternion);
+    await page.evaluate(()=>{for(let i=0;i<8;i++)document.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:120,bubbles:true}));});
+    await page.waitForFunction(q=>window.roamSample.quaternion.some((v,i)=>Math.abs(v-q[i])>.05),poleStart);
+    const beyondPole=await page.evaluate(()=>window.roamSample.quaternion);
+    await page.evaluate(()=>document.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:120,bubbles:true})));
+    await page.waitForFunction(q=>window.roamSample.quaternion.some((v,i)=>Math.abs(v-q[i])>.03),beyondPole);
+    const continuedPitch=await page.evaluate(()=>window.roamSample.quaternion);
+    assert.ok(continuedPitch.every(Number.isFinite));
+    await page.evaluate(()=>document.dispatchEvent(new MouseEvent('mousemove',{movementX:60,movementY:0,bubbles:true})));
+    await page.waitForFunction(q=>window.roamSample.quaternion.some((v,i)=>Math.abs(v-q[i])>.02),continuedPitch);
+    assert.ok(await page.evaluate(()=>window.roamSample.quaternion.every(Number.isFinite)));
+    await page.evaluate(()=>{document.dispatchEvent(new MouseEvent('mousemove',{movementX:-60,movementY:0,bubbles:true}));for(let i=0;i<9;i++)document.dispatchEvent(new MouseEvent('mousemove',{movementX:0,movementY:-120,bubbles:true}));});
+    await page.waitForFunction(q=>window.roamSample.quaternion.every((v,i)=>Math.abs(v-q[i])<.001),poleStart);
     await page.mouse.move(650,280,{steps:5});
     const before = await page.evaluate(() => window.cameraSample);
     await page.mouse.move(750,280,{steps:5});
@@ -205,8 +257,9 @@ const { chromium } = require('playwright');
     await page.waitForFunction(start=>Math.hypot(...window.roamSample.player.map((v,i)=>v-start[i]))>3,startMove.player);
     const moved=await page.evaluate(()=>window.roamSample);
     const movedCamera=await page.evaluate(()=>window.cameraSample);
-    const speed=Math.hypot(...movedCamera.map((v,i)=>v-startCamera[i]))/(moved.time-startMove.time);
-    assert.ok(speed>3 && speed<4.8,`Expected faster 4.5-unit/s movement, measured ${speed}`);
+    const motion=await page.evaluate(()=>window.qaMovement);
+    const speed=motion.distance/motion.seconds;
+    assert.ok(Math.abs(speed-4.5)<.05,`Expected 4.5 units per simulated second, measured ${speed}`);
     assert.ok(moved.player.reduce((sum,v,i)=>sum+(v-startMove.player[i])*startMove.direction[i],0)>2);
     await page.screenshot({path:path.join(output,'moving.png')});
     const trail=await page.evaluate(p=>{
@@ -247,7 +300,10 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => !document.fullscreenElement);
 
     // Refused pointer lock must still allow movement without holding a button.
-    await page.evaluate(() => { document.querySelector('#viewport').requestPointerLock=()=>Promise.reject(new Error('QA denial')); });
+    await page.evaluate(() => {
+      const viewport=document.querySelector('#viewport');window.qaNativePointerLock=viewport.requestPointerLock;window.qaLockAttempts=0;
+      viewport.requestPointerLock=()=>{window.qaLockAttempts++;return Promise.reject(new Error('QA denial'));};
+    });
     for (let attempt=0;attempt<2;attempt++) {
       assert.equal(await page.locator('#density').isDisabled(), true);
       assert.equal(await page.locator('#pointCount').textContent(), '125,000');
@@ -257,17 +313,41 @@ const { chromium } = require('playwright');
       const start = await page.evaluate(() => window.cameraSample);
       await page.mouse.move(730,480,{steps:5});
       await page.waitForFunction(previous => window.cameraSample.some((v,i) => Math.abs(v-previous[i])>.1), start);
-      await page.locator('#roamExit').click();
+      if(attempt===0){
+        // Without pointer lock, resting at the screen edge still turns the camera.
+        await page.mouse.move(1279,450);
+        const edge=await page.evaluate(()=>window.roamSample);
+        await page.waitForFunction(t=>window.roamSample.time>t+.35,edge.time);
+        const edgeTurn=await page.evaluate(()=>window.roamSample.quaternion);
+        assert.ok(edgeTurn.some((v,i)=>Math.abs(v-edge.quaternion[i])>.01),'Unlocked edge continues to turn while pointer is stationary');
+        await page.mouse.move(650,450);
+        const attempts=await page.evaluate(()=>window.qaLockAttempts);
+        await page.mouse.click(650,450);
+        await page.waitForFunction(n=>window.qaLockAttempts>n,attempts);
+        await page.locator('#roamExit').click();
+      }else{
+        // A fresh click retries pointer lock with a real user gesture after an earlier refusal.
+        await page.evaluate(()=>document.querySelector('#viewport').requestPointerLock=window.qaNativePointerLock);
+        await page.mouse.click(650,450);
+        await page.waitForFunction(()=>document.pointerLockElement?.id==='viewport');
+        await page.keyboard.press('Escape');
+      }
       await page.waitForFunction(() => !document.body.classList.contains('is-roaming') && !document.fullscreenElement);
     }
     // Permission failure leaves the original overview usable and offers retry.
-    await page.evaluate(() => { document.querySelector('#hologram').requestFullscreen=()=>Promise.reject(new Error('QA denial')); });
+    await page.evaluate(() => {
+      const viewport=document.querySelector('#viewport');window.qaLockDuringFullscreenFailure=false;
+      viewport.requestPointerLock=async function(...args){const result=await window.qaNativePointerLock.apply(this,args);window.qaLockDuringFullscreenFailure=document.pointerLockElement===this;return result;};
+      document.querySelector('#hologram').requestFullscreen=()=>new Promise((_,reject)=>setTimeout(()=>reject(new Error('QA denial')),80));
+    });
     await page.locator('h1').dblclick();
     await page.waitForFunction(() => document.querySelector('#roamNotice').textContent.includes('retry'));
     assert.equal(await page.locator('body').evaluate(el=>el.classList.contains('is-roaming')), false);
+    await page.waitForFunction(()=>!document.pointerLockElement);
+    assert.equal(await page.evaluate(()=>window.qaLockDuringFullscreenFailure),true,'Failure scenario acquired pointer lock before cleanup');
     await page.locator('#chartToggle').click();
     assert.equal(await page.locator('#planetCharts svg').count(), 1);
     assert.deepEqual(errors, []); assert.deepEqual(failed, []);
-    console.log(JSON.stringify({passed:true,densities:[50],checks:['fixed density','16px flat cursor','70% opacity and 4-second colour cycle','neighbor tint / unchanged distant points','5-second fade','fullscreen','labels hidden','horizontal reversed / vertical unchanged','wheel','32-unit camera distance','Earth spawn without following','W forward','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures','chart regression'],movementSpeed:speed,tintPixels,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
+    console.log(JSON.stringify({passed:true,densities:[50],checks:['fixed density','16px flat cursor','70% opacity and 4-second colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','32-unit camera distance','Earth spawn without following','W forward','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],movementSpeed:speed,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});
