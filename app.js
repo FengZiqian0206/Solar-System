@@ -1,7 +1,7 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
 import { createRoaming } from './roaming.js?v=grid-roam-7';
-import { createPointInfluence } from './point-influence.js?v=3';
+import { createPointInfluence } from './point-influence.js?v=4';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -84,7 +84,7 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail,aPlayerTint; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint;
+attribute float aSeed,aDetail,aPlayerTint; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
@@ -100,11 +100,12 @@ void main(){
  float meteorAngle=hash(vec3(cycle,17.,3.))*6.28318,meteorLift=(hash(vec3(cycle,23.,5.))-.5)*.8;vec3 meteorDir=normalize(vec3(cos(meteorAngle),meteorLift,sin(meteorAngle)));vec3 meteorSide=normalize(vec3(-meteorDir.z,0.,meteorDir.x)),meteorUp=normalize(cross(meteorSide,meteorDir));
  vec3 meteorStart=-meteorDir*uHalf*1.12+meteorSide*uHalf*(hash(vec3(cycle,29.,13.))-.5)*.7+meteorUp*uHalf*(hash(vec3(cycle,31.,19.))-.5)*.38;vec3 meteorHead=meteorStart+meteorDir*(age/meteorDuration)*(uHalf*2.24),meteorDelta=meteorHead-position;float behind=dot(meteorDelta,meteorDir);vec3 meteorPerp=meteorDelta-meteorDir*behind;float meteorD2=dot(meteorPerp,meteorPerp),tailLength=uHalf*.42;
  if(ratio<=.281&&meteorOn>0.&&behind>=0.&&behind<tailLength&&meteorD2<2.6){float intensity=sin(3.14159*age/meteorDuration)*pow(1.-behind/tailLength,1.3)*(1.-meteorD2/2.6);ratio+=intensity*.18;sizeFactor+=intensity*.5;}
- vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.47);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.12;radius*=mix(1.55,1.00,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.55,1.32,visualDense)*(1.+uBeltBoost*(-.12+aSeed*.12));float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
- // Keep overview's perspective/zoom sizing; only bound extreme close-up sizes.
- if(uRoam>.5)gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio,(bodyDepth>0.?48.:14.)*uPixelRatio);
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
+ vec3 renderedPosition=position+uRoam*(1.-vPlayer)*aPlayerOffset;
+ vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(renderedPosition,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.47);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.12;radius*=mix(1.55,1.00,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.55,1.32,visualDense)*(1.+uBeltBoost*(-.12+aSeed*.12));float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
+ // Keep overview's perspective/zoom sizing; only bound extreme close-up sizes.
+ if(uRoam>.5)gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio,(bodyDepth>0.?48.:14.)*uPixelRatio);
  // Per-cell temporal influence: quick colour arrival, deliberately slower departure.
  vPlayerTint=uRoam*aPlayerTint;
  float playerCore=uRoam*smoothstep(.3,.85,aPlayerTint)*(1.-smoothstep(.4,1.7,playerDistance/(2.*uHalf/49.)));
@@ -126,8 +127,11 @@ function rebuild(){
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
   pointInfluence=createPointInfluence(n,half);
   geometry.setAttribute('aPlayerTint',new THREE.BufferAttribute(pointInfluence.values,1).setUsage(THREE.DynamicDrawUsage));
+  geometry.setAttribute('aPlayerOffset',new THREE.BufferAttribute(pointInfluence.offsets,3).setUsage(THREE.DynamicDrawUsage));
+  geometry.computeBoundingSphere();geometry.boundingSphere.radius+=step*1.8;
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:1},uBeltBoost:{value:gridSize===150?1:0},uZoom:{value:zoom},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()},uShadowDirs:{value:Array.from({length:9},()=>new THREE.Vector3())}}});
   material.defaultAttributeValues.aDetail=[0];
+  material.defaultAttributeValues.aPlayerOffset=[0,0,0];
   material.uniforms.uRoam={value:0};
   material.uniforms.uPlayer={value:new THREE.Vector3()};
   cloud=new THREE.Points(geometry,material);scene.add(cloud);
@@ -150,7 +154,7 @@ function init(){
     error.code='SHADER_FAILED';throw error;
   };
   renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);
-  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onStart:()=>{drag=null;pointInfluence.reset();geometry.attributes.aPlayerTint.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
+  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onStart:()=>{drag=null;pointInfluence.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
   renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
@@ -159,7 +163,7 @@ function frame(now){
   material.uniforms.uTime.value=now/1000;
   material.uniforms.uZoom.value=Math.max(1,roaming.active?roaming.zoom:zoom);
   material.uniforms.uRoam.value=roaming.active?1:0;
-  if(roaming.active){cloud.rotation.set(0,0,0);cloud.position.set(0,0,0);roaming.update(dt);material.uniforms.uPlayer.value.copy(roaming.position);if(pointInfluence.update(roaming.influencePosition,dt))geometry.attributes.aPlayerTint.needsUpdate=true}
+  if(roaming.active){cloud.rotation.set(0,0,0);cloud.position.set(0,0,0);roaming.update(dt);material.uniforms.uPlayer.value.copy(roaming.position);if(pointInfluence.update(roaming.influencePosition,dt)){geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true}}
   else {cloud.rotation.set(pitch,yaw,0);const focus=bodies[followPlanet>=0?followPlanet+1:0];focusOffset.copy(focus.pos).applyEuler(cloud.rotation).multiplyScalar(-1);cloud.position.copy(focusOffset);camera.position.set(0,0,78);camera.zoom=zoom}
   camera.updateProjectionMatrix();renderer.render(scene,camera);if(!roaming.active)updateLabels();
   $('#sceneInfo').textContent=`CUBIC LATTICE  ${gridSize}³   ·   ${(gridSize**3).toLocaleString()} POINTS   ·   ${(simDays/365.256).toFixed(2)} EARTH YEARS`;

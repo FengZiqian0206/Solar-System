@@ -17,7 +17,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   hologram.append(notice);
 
   // Motion is integrated continuously, but only an existing lattice vertex is highlighted.
-  // No point geometry is created, moved or removed.
+  // Nearby points can render off-grid; the player and base lattice stay on-grid.
   const position = new THREE.Vector3(), travel = new THREE.Vector3();
   const offset = new THREE.Vector3(), target = new THREE.Vector3(), up = new THREE.Vector3(), forward = new THREE.Vector3();
   let active = false, pending = false, locked = false, moving = false, yaw = Math.PI / 4, pitch = .24, distance = 32;
