@@ -70,19 +70,45 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('#rainbowCursor span').textContent(), 'Double-click to start');
     assert.equal(await page.locator('#rainbowCursor').isVisible(), true);
     assert.equal(await page.locator('#rainbowCursor').evaluate(el=>getComputedStyle(el).width), '16px');
-    assert.equal(await page.locator('#rainbowCursor i').evaluate(el=>getComputedStyle(el).backgroundImage), 'none');
     assert.equal(await page.locator('#rainbowCursor i').evaluate(el=>getComputedStyle(el).opacity), '0.7');
     assert.equal(await page.locator('#rainbowCursor i').evaluate(el=>getComputedStyle(el).animationDuration), '4s');
-    const timing = await page.locator('#rainbowCursor span').evaluate(el => {
-      const a = el.getAnimations()[0];
-      const {duration, delay} = a.effect.getTiming();
-      a.pause(); a.currentTime = delay + 1500;
-      return {duration, delay, shown:getComputedStyle(el).opacity};
+    const cursorVisual=await page.locator('#rainbowCursor i').evaluate(el=>{
+      const animation=el.getAnimations()[0];animation.pause();animation.currentTime=0;
+      const gradient=getComputedStyle(el).backgroundImage,filter0=getComputedStyle(el).filter;
+      animation.currentTime=2000;
+      const filter2=getComputedStyle(el).filter;
+      const colors=Array.from(gradient.matchAll(/rgba?\(([^)]+)\)/g),match=>match[1].match(/[\d.]+/g).slice(0,3).map(Number));
+      animation.play();return {gradient,filter0,filter2,colors};
     });
-    assert.equal(timing.duration, 5000); assert.equal(timing.delay, 5000); assert.equal(+timing.shown, 1);
+    assert.ok(cursorVisual.gradient.startsWith('linear-gradient('),'Overview cursor uses a linear gradient');
+    assert.ok(cursorVisual.colors.length>=2&&cursorVisual.colors.every(([r,g,b])=>r===g&&g===b),'Cursor gradient contains only neutral colours');
+    assert.ok(new Set(cursorVisual.colors.map(color=>color[0])).size>1,'Black and white gradient has contrasting tones');
+    assert.notEqual(cursorVisual.filter0,cursorVisual.filter2,'Neutral cursor visibly changes through its four-second animation');
+    const timing = await page.locator('#rainbowCursor').evaluate(root=>{
+      const guide=root.querySelector('.cursor-guide'),hint=root.querySelector('span');
+      const sample=el=>{const animation=el.getAnimations()[0],{duration,delay}=animation.effect.getTiming();animation.pause();animation.currentTime=delay+1500;return {duration,delay,shown:getComputedStyle(el).opacity};};
+      return {hint:sample(hint),guide:sample(guide),geometry:{points:guide.querySelector('polyline').getAttribute('points'),width:getComputedStyle(guide).width,height:getComputedStyle(guide).height,left:getComputedStyle(guide).left,top:getComputedStyle(guide).top,origin:getComputedStyle(guide).transformOrigin,hintLeft:getComputedStyle(hint).left,hintTop:getComputedStyle(hint).top},passthrough:[root,guide,hint].every(el=>getComputedStyle(el).pointerEvents==='none')};
+    });
+    for(const item of [timing.hint,timing.guide]){assert.equal(item.duration,5000);assert.equal(item.delay,5000);assert.equal(+item.shown,1);}
+    assert.deepEqual(timing.geometry,{points:'8,42 42,12 118,12',width:'130px',height:'60px',left:'0px',top:'-34px',origin:'8px 42px',hintLeft:'128px',hintTop:'-32px'});
+    assert.equal(timing.passthrough,true,'Hint and leader do not intercept gestures');
     await page.screenshot({path:path.join(output,'cursor.png')});
-    const hidden = await page.locator('#rainbowCursor span').evaluate(el => {el.getAnimations()[0].currentTime=9500;return getComputedStyle(el).opacity;});
-    assert.equal(+hidden, 0);
+    const cursorCorners=[];
+    for(const corner of [{name:'top-left',x:12,y:12},{name:'top-right',x:1268,y:12},{name:'bottom-left',x:12,y:888},{name:'bottom-right',x:1268,y:888}]){
+      await page.mouse.move(corner.x,corner.y);
+      const measured=await page.locator('#rainbowCursor').evaluate((root,point)=>{
+        for(const el of [root.querySelector('span'),root.querySelector('.cursor-guide')]){const a=el.getAnimations()[0];a.pause();a.currentTime=6500;}
+        const bounds=el=>{const r=el.getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom};};
+        return {hint:bounds(root.querySelector('span')),line:bounds(root.querySelector('polyline')),left:root.classList.contains('tip-left'),below:root.classList.contains('tip-below'),blocked:!!document.elementFromPoint(point.x,point.y)?.closest('#rainbowCursor')};
+      },corner);
+      for(const rect of [measured.hint,measured.line])assert.ok(rect.x>=0&&rect.y>=0&&rect.right<=1280&&rect.bottom<=900,`${corner.name} visible hint and leader fit inside viewport`);
+      assert.equal(measured.left,corner.x>1280-260);assert.equal(measured.below,corner.y<56);assert.equal(measured.blocked,false);
+      cursorCorners.push({corner:corner.name,...measured});
+      await page.screenshot({path:path.join(output,'cursor-'+corner.name+'.png')});
+    }
+    await page.mouse.move(650,280);
+    const hidden=await page.locator('#rainbowCursor').evaluate(root=>[root.querySelector('span'),root.querySelector('.cursor-guide')].map(el=>{el.getAnimations()[0].currentTime=9500;return +getComputedStyle(el).opacity;}));
+    assert.deepEqual(hidden,[0,0],'Hint and leader fade away together');
 
     // Instrument only this isolated test page, without adding production debug globals.
     await page.evaluate(async () => {
@@ -118,7 +144,7 @@ const { chromium } = require('playwright');
     // Read the real shader's output in a tiny isolated target, without particle overlap.
     const tintPixels=await page.evaluate(async()=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
-      const {createPointInfluence}=await import('./point-influence.js?v=5');
+      const {createPointInfluence}=await import('./point-influence.js?v=6');
       const field=createPointInfluence(50,26), c=-26+25*52/49;
       field.update({x:c,y:c,z:c},3);
       const renderer=window.qaRenderer, material=window.qaCloud.material.clone();
@@ -409,6 +435,6 @@ const { chromium } = require('playwright');
     await page.locator('#chartToggle').click();
     assert.equal(await page.locator('#planetCharts svg').count(), 1);
     assert.deepEqual(errors, []); assert.deepEqual(failed, []);
-    console.log(JSON.stringify({passed:true,densities:[50],checks:['automatic entry after splash without gesture','first interaction upgrades native fullscreen and pointer lock','exit stays in overview / manual re-entry','fixed density','16px flat cursor','70% opacity and 4-second colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','48-unit camera distance','Earth spawn without following','6-unit W forward / composed keyboard and button hold','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],entryDistance,movementSpeed:speed,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
+    console.log(JSON.stringify({passed:true,densities:[50],checks:['automatic entry after splash without gesture','first interaction upgrades native fullscreen and pointer lock','exit stays in overview / manual re-entry','fixed density','16px animated neutral gradient cursor','synchronized hint and leader / four-corner bounds / gesture passthrough','70% opacity and 4-second gameplay colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','48-unit camera distance','Earth spawn without following','6-unit W forward / composed keyboard and button hold','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],entryDistance,movementSpeed:speed,cursorVisual,cursorCorners,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

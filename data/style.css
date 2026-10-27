@@ -1,10 +1,12 @@
 :root{color-scheme:dark;--bg:#000;--panel:#0c0c0c;--panel2:#141414;--line:#303030;--muted:#9e9e9e;--fg:#f0f0f0}
-/* The only new colour accent: a cursor that becomes the third-person player point. */
+/* Monochrome overview cursor; the roaming point cloud keeps its colour cycle. */
 #rainbowCursor{display:none;position:fixed;z-index:100;pointer-events:none;width:16px;height:16px;transform:translate(-50%,-50%)}
-#rainbowCursor i{display:block;width:100%;height:100%;border-radius:50%;background:#ff557d;opacity:.7;animation:rainbow-turn 4s linear infinite}
-#rainbowCursor span{position:absolute;left:31px;top:-17px;color:#e5e5e5;font:11px/20px Arial,sans-serif;white-space:nowrap;text-shadow:0 1px 5px #000;opacity:0;animation:roam-prompt 5s ease-in-out 5s infinite}
-#rainbowCursor.tip-left span{left:auto;right:31px}#rainbowCursor.tip-below span{top:20px}
-@keyframes rainbow-turn{to{filter:hue-rotate(360deg)}}
+#rainbowCursor i{display:block;width:100%;height:100%;border-radius:50%;background:linear-gradient(135deg,#fff 0%,#9c9c9c 48%,#080808 100%);box-shadow:inset 0 0 0 1px #ffffff40;opacity:.7;animation:cursor-monochrome 4s ease-in-out infinite}
+#rainbowCursor .cursor-guide,#rainbowCursor span{opacity:0;animation:roam-prompt 5s ease-in-out 5s infinite}
+#rainbowCursor .cursor-guide{position:absolute;left:0;top:-34px;width:130px;height:60px;overflow:visible;fill:none;stroke:rgba(215,215,215,.58);stroke-width:1;transform-origin:8px 42px;transform:scale(var(--guide-x,1),var(--guide-y,1))}
+#rainbowCursor span{position:absolute;left:128px;top:-32px;color:#e5e5e5;font:11px/20px Arial,sans-serif;white-space:nowrap;text-shadow:0 1px 5px #000}
+#rainbowCursor.tip-left{--guide-x:-1}#rainbowCursor.tip-left span{left:auto;right:128px}#rainbowCursor.tip-below{--guide-y:-1}#rainbowCursor.tip-below span{top:28px}
+@keyframes cursor-monochrome{0%,100%{filter:invert(0)}50%{filter:invert(1)}}
 @keyframes roam-prompt{0%,75%,100%{opacity:0}18%,52%{opacity:1}}
 @media (hover:hover) and (pointer:fine){body.has-rainbow-cursor:not(.is-roaming),body.has-rainbow-cursor:not(.is-roaming) *{cursor:none!important}body.has-rainbow-cursor:not(.is-roaming) #rainbowCursor{display:block}}
 .hologram.is-roaming{position:fixed;inset:0;z-index:50;padding:0!important;grid-template-rows:minmax(0,1fr);height:100%;height:100dvh;width:100%}

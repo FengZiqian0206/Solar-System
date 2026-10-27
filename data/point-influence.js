@@ -39,7 +39,7 @@ export function createPointInfluence(size, half) {
         }
         const goalDistance=Math.hypot(dx,dy,dz)*amount;
         const previousDistance=Math.hypot(offsets[q],offsets[q+1],offsets[q+2]);
-        const response=1-Math.exp(-Math.max(0,dt)/(goalDistance>previousDistance?.18:3));
+        const response=1-Math.exp(-Math.max(0,dt)/(goalDistance>previousDistance?.18:1.2));
         for(let axis=0;axis<3;axis++) {
           const goal=(axis===0?dx:axis===1?dy:dz)*amount;
           const shifted=offsets[q+axis]+(goal-offsets[q+axis])*response;
