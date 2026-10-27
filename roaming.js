@@ -21,7 +21,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   // Nearby points can render off-grid; the player and base lattice stay on-grid.
   const position = new THREE.Vector3(), travel = new THREE.Vector3();
   const offset = new THREE.Vector3(), forward = new THREE.Vector3(), orbitRotation = new THREE.Euler(0,0,0,'YXZ');
-  let active = false, pending = false, locked = false, moving = false, nativeFullscreen = false, yaw = Math.PI / 4, pitch = .24, distance = 40;
+  let active = false, pending = false, enteredOnce = false, locked = false, moving = false, nativeFullscreen = false, yaw = Math.PI / 4, pitch = .24, distance = 48;
   let pointer = null, lookPointer = null, heldPointer = null, touchStart = null, lastTap = null, noticeTimer, lockPending = false;
 
   function setForward(source, pressed) {
@@ -59,6 +59,22 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       return Promise.resolve(viewport.requestPointerLock?.()).catch(()=>{}).finally(()=>{lockPending=false;});
     } catch (_) { lockPending=false;return Promise.resolve(); }
   }
+  async function requestImmersive(allowFallback=false) {
+    const touchMode=matchMedia('(pointer:coarse)').matches;
+    // Automatic entry cannot claim user activation; the first real gesture can upgrade it.
+    const lockAttempt=!touchMode && (!allowFallback || navigator.userActivation?.isActive)?requestLock():Promise.resolve();
+    if(document.fullscreenElement!==hologram) {
+      try { await hologram.requestFullscreen(); }
+      catch(error) { if(!allowFallback && !touchMode)throw error; }
+    }
+    if(!active && !pending) {
+      if(document.fullscreenElement===hologram)document.exitFullscreen().catch(()=>{});
+      if(document.pointerLockElement===viewport)document.exitPointerLock();
+      return;
+    }
+    nativeFullscreen=document.fullscreenElement===hologram;
+    await lockAttempt;
+  }
 
   function notify(text) {
     notice.textContent = text;
@@ -76,28 +92,21 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if (document.pointerLockElement === viewport) document.exitPointerLock();
     if (document.fullscreenElement === hologram) document.exitFullscreen().catch(() => {});
   }
-  async function enter() {
-    if (active || pending || !getEarth()) return;
+  async function enter({automatic=false}={}) {
+    if (active || pending || (automatic && enteredOnce) || !getEarth()) return;
     pending = true;
     try {
-      // Pointer lock must be requested before fullscreen consumes this gesture's activation.
       const touchMode=matchMedia('(pointer:coarse)').matches;
-      const lockAttempt=touchMode?Promise.resolve():requestLock();
-      if (document.fullscreenElement !== hologram) {
-        try { await hologram.requestFullscreen(); }
-        catch(error) { if(!touchMode)throw error; }
-      }
-      nativeFullscreen=document.fullscreenElement===hologram;
-      if (!nativeFullscreen && !touchMode) return;
+      await requestImmersive(automatic);
+      if (!nativeFullscreen && !touchMode && !automatic) return;
       onStart();
-      active = true; pointer = null; yaw = Math.PI / 4; pitch = .24;
-      distance = 40; stopMovement(); lookPointer = null;
+      active = true; enteredOnce = true;pointer = null; yaw = Math.PI / 4; pitch = .24;
+      distance = 48; stopMovement(); lookPointer = null;
       travel.copy(getEarth().pos); snapToGrid(); travel.copy(position);
       hud.hidden = false;
       document.body.classList.add('is-roaming');
       hologram.classList.add('is-roaming');
       notice.textContent = '';
-      await lockAttempt;
     } catch (_) {
       notify('无法进入全屏，请再次双击。 · Full screen unavailable. Double-click to retry.');
     } finally {
@@ -122,11 +131,12 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       if(event.pointerType==='touch')touchStart={id:event.pointerId,x:event.clientX,y:event.clientY,time:performance.now()};
       return;
     }
+    if(!nativeFullscreen || (event.pointerType==='mouse' && document.pointerLockElement!==viewport))requestImmersive(true);
     if(event.pointerType==='touch' || event.pointerType==='pen') {
       if(lookPointer)return;
       event.preventDefault();lookPointer={id:event.pointerId,x:event.clientX,y:event.clientY};
       viewport.setPointerCapture(event.pointerId);
-    }else if(document.pointerLockElement!==viewport)requestLock();
+    }
   });
   viewport.addEventListener('pointermove',event=>{
     if(!active || lookPointer?.id!==event.pointerId)return;
@@ -134,6 +144,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     lookPointer.x=event.clientX;lookPointer.y=event.clientY;
   });
   viewport.addEventListener('pointerup',event=>{
+    if(active && !nativeFullscreen)requestImmersive(true);
     // Some touch browsers do not synthesize dblclick; detect a short double-tap too.
     if(!active && touchStart?.id===event.pointerId){
       const now=performance.now(),tap=touchStart;touchStart=null;
@@ -171,7 +182,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') leave();
-    if (active && event.code === 'KeyW' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); setForward('keyboard',true); }
+    if (active && event.code === 'KeyW' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); if(!event.repeat)requestImmersive(true);setForward('keyboard',true); }
   });
   document.addEventListener('keyup', event => { if (event.code === 'KeyW') setForward('keyboard',false); });
   forwardButton.addEventListener('pointerdown',event=>{
@@ -181,13 +192,17 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   });
   forwardButton.addEventListener('contextmenu',event=>event.preventDefault());
   for(const type of ['pointerup','pointercancel','lostpointercapture'])forwardButton.addEventListener(type,event=>{
-    if(event.pointerId===heldPointer){heldPointer=null;setForward('pointer',false);}
+    if(event.pointerId===heldPointer){
+      if(type==='pointerup' && active && !nativeFullscreen)requestImmersive(true);
+      heldPointer=null;setForward('pointer',false);
+    }
   });
   forwardButton.addEventListener('keydown',event=>{if(active && (event.code==='Space'||event.code==='Enter')){event.preventDefault();setForward('button-key',true);}});
   forwardButton.addEventListener('keyup',event=>{if(event.code==='Space'||event.code==='Enter'){event.preventDefault();setForward('button-key',false);}});
   forwardButton.addEventListener('blur',()=>setForward('button-key',false));
   hud.querySelector('#roamExit').addEventListener('click', leave);
   return {
+    enter,
     get active() { return active; },
     get zoom() { return 78 / distance; },
     position,

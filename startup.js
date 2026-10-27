@@ -4,8 +4,9 @@
   const panel = document.getElementById('webglError');
   const controls = document.querySelectorAll('.controls button, .controls input, #fullscreen');
   controls.forEach(control => control.disabled = true);
+  let beginRoaming;
   setTimeout(() => document.getElementById('splash')?.classList.add('fade'), 1000);
-  setTimeout(() => document.getElementById('splash')?.remove(), 1950);
+  setTimeout(() => { document.getElementById('splash')?.remove();beginRoaming?.(); }, 1950);
   function showFailure(message, error) {
     status.textContent = '● 加载失败 · LOAD FAILED';
     panel.hidden = false;
@@ -27,13 +28,15 @@
   }
   const timeout = setTimeout(() => showFailure('资源加载超时，请检查网络后重试。 · Loading timed out. Please retry.'), 20000);
   // Resolve against the page, not the classic script's possibly opaque origin.
-  const appUrl = new URL('./app.js?v=grid-roam-11', document.baseURI).href;
-  import(appUrl).then(() => {
+  const appUrl = new URL('./app.js?v=grid-roam-12', document.baseURI).href;
+  import(appUrl).then(app => {
     clearTimeout(timeout);
     panel.hidden = true;
     panel.style.display = 'none';
     controls.forEach(control => control.disabled = control.id === 'density');
     status.textContent = '● 运行中 · RUNNING';
+    beginRoaming=()=>app.startInitialRoaming();
+    if(!document.getElementById('splash'))beginRoaming();
   }).catch(error => {
     clearTimeout(timeout);
     console.error('Solar System startup failed:', error);

@@ -1,7 +1,7 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-11';
-import { createPointInfluence } from './point-influence.js?v=4';
+import { createRoaming } from './roaming.js?v=grid-roam-12';
+import { createPointInfluence } from './point-influence.js?v=5';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -182,3 +182,4 @@ $('#fullscreen').onclick=async()=>{if(!document.fullscreenElement)await $('#holo
 function rows(filter=''){const f=filter.trim().toLowerCase();$('#planetRows').innerHTML=PLANETS.map((p,index)=>({p,index})).filter(({p})=>!f||p[0].includes(f)||p[1].toLowerCase().includes(f)).map(({p,index})=>{const active=followPlanet===index;return `<tr class="${active?'is-following':''}"><td><div class="planet-cell"><span>${p[0]}&nbsp;&nbsp;${p[1]}</span><button class="follow-button" data-follow="${index}" aria-pressed="${active}">${active?'跟随中 · ACTIVE':'跟随 · FOLLOW'}</button></div></td><td>${p[2].toFixed(4)}</td><td>${p[3].toLocaleString(undefined,{maximumFractionDigits:3})}</td><td>${(p[3]/365.256).toFixed(3)}</td><td>${p[5].toFixed(2)}</td><td>${p[6].toLocaleString()}</td></tr>`}).join('')}rows();$('#planetRows').addEventListener('click',e=>{const button=e.target.closest('.follow-button');if(button)setFollow(+button.dataset.follow)});$('#search').addEventListener('input',e=>rows(e.target.value));new ResizeObserver(resize).observe(viewport);
 init();
 initPlanetCharts(PLANETS);
+export function startInitialRoaming(){return roaming.enter({automatic:true});}

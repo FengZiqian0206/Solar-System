@@ -21,27 +21,38 @@ const {chromium}=require('playwright');
       page.on('pageerror',e=>errors.push(e.message));
       page.on('response',r=>{if(r.status()>=400&&!r.url().endsWith('favicon.ico'))failed.push(r.url());});
       try{
-        await page.goto(url);
-        await page.waitForFunction(()=>document.querySelector('#status').textContent.includes('RUNNING'));
-        await page.locator('#splash').waitFor({state:'detached'});
-        await page.evaluate(async mode=>{
-          const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
-          window.qaLockRequests=0;
-          document.querySelector('#viewport').requestPointerLock=()=>{window.qaLockRequests++;return Promise.reject(new Error('Unexpected mobile pointer lock'));};
-          if(mode==='reject')document.querySelector('#hologram').requestFullscreen=()=>Promise.reject(new Error('QA mobile fullscreen unavailable'));
-          if(mode==='missing')document.querySelector('#hologram').requestFullscreen=undefined;
-          document.querySelector('#pause').click();
-          document.addEventListener('pointerdown',event=>{if(event.target.closest('#roamForward'))window.qaForwardPointer=event.pointerId;},true);
-          window.qaCaptureLog=[];
-          for(const type of ['gotpointercapture','lostpointercapture'])document.addEventListener(type,event=>{if(event.target.id==='roamForward')window.qaCaptureLog.push({type,id:event.pointerId});},true);
-          const afterRender=THREE.Points.prototype.onAfterRender;
-          THREE.Points.prototype.onAfterRender=function(renderer,scene,camera,...args){
-            afterRender.call(this,renderer,scene,camera,...args);
-            if(!this.material?.uniforms?.uInfluenceCenter||this.geometry.attributes.position.count!==125000)return;
-            const u=this.material.uniforms;
-            window.qaSample={time:u.uTime.value,active:u.uRoam.value,travel:u.uInfluenceCenter.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),calls:renderer.info.render.calls,points:renderer.info.render.points};
+        await page.addInitScript(mode=>{
+          window.qaLockRequests=0;window.qaFullscreenRequests=[];
+          Element.prototype.requestPointerLock=()=>{window.qaLockRequests++;return Promise.reject(new Error('Unexpected mobile pointer lock'));};
+          const fullscreen=Element.prototype.requestFullscreen;
+          Element.prototype.requestFullscreen=mode==='missing'?undefined:function(...args){
+            window.qaFullscreenRequests.push({active:navigator.userActivation.isActive,target:this.id});
+            return mode==='reject'?Promise.reject(new Error('QA mobile fullscreen unavailable')):fullscreen.apply(this,args);
           };
+          const observer=new MutationObserver(()=>{
+            if(document.body?.classList.contains('is-roaming')){window.qaFirstRoam={splashPresent:!!document.querySelector('#splash')};observer.disconnect();}
+          });
+          observer.observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+          document.addEventListener('DOMContentLoaded',async()=>{
+            const {THREE}=await import(new URL('./renderer-support.js?v=visual-balance-1',location.href).href);
+            document.addEventListener('pointerdown',event=>{if(event.target.closest('#roamForward'))window.qaForwardPointer=event.pointerId;},true);
+            window.qaCaptureLog=[];
+            for(const type of ['gotpointercapture','lostpointercapture'])document.addEventListener(type,event=>{if(event.target.id==='roamForward')window.qaCaptureLog.push({type,id:event.pointerId});},true);
+            const afterRender=THREE.Points.prototype.onAfterRender;
+            let initialReported=false;
+            THREE.Points.prototype.onAfterRender=function(renderer,scene,camera,...args){
+              afterRender.call(this,renderer,scene,camera,...args);
+              if(!this.material?.uniforms?.uInfluenceCenter||this.geometry.attributes.position.count!==125000)return;
+              const u=this.material.uniforms;
+              window.qaSample={time:u.uTime.value,active:u.uRoam.value,travel:u.uInfluenceCenter.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),calls:renderer.info.render.calls,points:renderer.info.render.points};
+              if(u.uRoam.value&&!initialReported){initialReported=true;console.log('QA_INITIAL_ROAM_FRAME_READY');}
+            };
+          });
         },profile.fullscreen);
+        // Wait on browser-owned events rather than evaluation that supplies a synthetic gesture.
+        const initialFrame=page.waitForEvent('console',{predicate:message=>message.text()==='QA_INITIAL_ROAM_FRAME_READY'});
+        await page.goto(url);
+        await initialFrame;
         assert.equal(await page.evaluate(()=>matchMedia('(pointer:coarse)').matches),true);
         const cdp=await context.newCDPSession(page);
         const touch=(id,x,y)=>({id,x,y,radiusX:4,radiusY:4,force:.7});
@@ -58,6 +69,24 @@ const {chromium}=require('playwright');
           await page.waitForFunction(t=>window.qaSample.time>t+.25,stopped.time);
           assert.deepEqual(await page.evaluate(()=>window.qaSample.travel),stopped.travel,'Forward travel stops on release/cancel');
         }
+        assert.equal(await page.evaluate(()=>window.qaFirstRoam.splashPresent),false,'Automatic mobile entry follows splash removal');
+        assert.equal(await page.evaluate(()=>document.fullscreenElement),null,'Automatic mobile entry uses CSS fullscreen without activation');
+        assert.equal(await page.evaluate(()=>document.pointerLockElement),null);
+        assert.ok(await page.evaluate(()=>window.qaFullscreenRequests.every(request=>!request.active)),'Automatic fullscreen requests have no user activation');
+        await page.evaluate(()=>document.querySelector('#pause').click());
+        const automatic=await page.evaluate(()=>window.qaSample),automaticDistance=Math.hypot(...automatic.camera.map((v,i)=>v-automatic.travel[i]));
+        assert.ok(Math.abs(automaticDistance-48)<.01);
+        await page.screenshot({path:path.join(output,profile.name+'-automatic-entry.png')});
+        const firstViewport=await page.locator('#viewport').boundingBox();
+        await page.touchscreen.tap(firstViewport.x+firstViewport.width*.5,firstViewport.y+firstViewport.height*.4);
+        if(profile.fullscreen==='native')await page.waitForFunction(()=>document.fullscreenElement?.id==='hologram');
+        assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true);
+        assert.deepEqual(await page.evaluate(()=>window.qaSample.travel),automatic.travel,'Native upgrade preserves the active roaming position');
+        await page.locator('#roamExit').tap();
+        await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement);
+        const exitTime=await page.evaluate(()=>window.qaSample.time);
+        await page.waitForFunction(t=>window.qaSample.time>t+.4,exitTime);
+        assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),false,'Automatic entry is not repeated after exit');
         await doubleTap();
         assert.equal(await page.evaluate(()=>window.qaLockRequests),0,'Coarse input skips pointer lock');
         assert.equal(await page.evaluate(()=>document.fullscreenElement?.id||null),profile.fullscreen==='native'?'hologram':null);
@@ -73,7 +102,7 @@ const {chromium}=require('playwright');
         assert.ok(layout.exit.y<60&&layout.exit.right>layout.width-80,'Exit sits at the top right');
         assert.equal(layout.bodyOverflow,'hidden');
         const entry=await page.evaluate(()=>window.qaSample),entryDistance=Math.hypot(...entry.camera.map((v,i)=>v-entry.travel[i]));
-        assert.ok(Math.abs(entryDistance-40)<.01);assert.equal(entry.calls,1);assert.equal(entry.points,125000);
+        assert.ok(Math.abs(entryDistance-48)<.01);assert.equal(entry.calls,1);assert.equal(entry.points,125000);
         await page.screenshot({path:path.join(output,profile.name+'-entry.png')});
         const key=layout.key,w=touch(1,key.x+key.width/2,key.y+key.height/2);
         await send('touchStart',[w]);
@@ -116,7 +145,7 @@ const {chromium}=require('playwright');
         await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement);
         assert.equal(await page.locator('#roamForward').getAttribute('aria-pressed'),'false','Exit releases held W');
         assert.deepEqual(errors,[]);assert.deepEqual(failed,[]);
-        results.push({profile:profile.name,entryDistance,layout,checks:['real double tap','coarse-pointer skip','full viewport and safe controls','touch hold and release','simultaneous movement and touch look','exit cleanup',...(profile.fullscreen==='native'?[]:['fullscreen fallback','cancel','lost pointer capture','blur','hidden tab'])]});
+        results.push({profile:profile.name,automaticDistance,entryDistance,layout,checks:['automatic entry after splash without activation','first tap upgrades the existing native session when available','exit stays in overview until manual double tap','real double tap','coarse-pointer skip','full viewport and safe controls','touch hold and release','simultaneous movement and touch look','exit cleanup',...(profile.fullscreen==='native'?[]:['fullscreen fallback','cancel','lost pointer capture','blur','hidden tab'])]});
       }finally{await context.close();}
     }
     console.log(JSON.stringify({passed:true,results,screenshots:output}));

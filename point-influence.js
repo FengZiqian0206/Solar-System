@@ -37,7 +37,9 @@ export function createPointInfluence(size, half) {
           const outer=Math.max(0,Math.min(1,(distance-radius-.6)/(repelRadius-radius-.6)));
           amount=distance>0?1.8*inner*inner*(3-2*inner)*(1-outer*outer*(3-2*outer))/distance:0;
         }
-        const response=1-Math.exp(-Math.max(0,dt)/(amount>0?.18:.9));
+        const goalDistance=Math.hypot(dx,dy,dz)*amount;
+        const previousDistance=Math.hypot(offsets[q],offsets[q+1],offsets[q+2]);
+        const response=1-Math.exp(-Math.max(0,dt)/(goalDistance>previousDistance?.18:3));
         for(let axis=0;axis<3;axis++) {
           const goal=(axis===0?dx:axis===1?dy:dz)*amount;
           const shifted=offsets[q+axis]+(goal-offsets[q+axis])*response;
