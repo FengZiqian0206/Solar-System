@@ -4,7 +4,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   const cursor = document.createElement('div');
   cursor.id = 'rainbowCursor';
   cursor.setAttribute('aria-hidden', 'true');
-  cursor.innerHTML = '<i></i><span>Double-click to start</span>';
+  cursor.innerHTML = '<i></i><svg class="cursor-guide" viewBox="0 0 130 60" aria-hidden="true"><polyline points="8,42 42,12 118,12"/></svg><span>Double-click to start</span>';
   document.body.append(cursor);
   const hud = document.createElement('div');
   hud.id = 'roamHud';
@@ -160,8 +160,8 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if (event.pointerType !== 'mouse' || active) return;
     cursor.style.left = `${event.clientX}px`;
     cursor.style.top = `${event.clientY}px`;
-    cursor.classList.toggle('tip-left', event.clientX > innerWidth - 180);
-    cursor.classList.toggle('tip-below', event.clientY < 42);
+    cursor.classList.toggle('tip-left', event.clientX > innerWidth - 260);
+    cursor.classList.toggle('tip-below', event.clientY < 56);
     document.body.classList.add('has-rainbow-cursor');
   });
   document.addEventListener('pointerout', event => {
