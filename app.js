@@ -108,9 +108,16 @@ void main(){
    vec3 delta=renderedPosition-uInfluenceCenter;
    float initialRadius=length(delta),coreRadius=2.1*(2.*uHalf/49.);
    if(initialRadius<=coreRadius){
-     // The original coloured core fades slowly; arriving particles are swallowed separately.
-     vCollapseFade=1.-smoothstep(0.,.5,uCollapse);
-     collapseSize=mix(1.,.65,uCollapse);
+     // Split the original coloured core into slowing polar jets; fade only near their tips.
+     float jetProgress=(1.-exp(-.2*min(24.*uCollapse,12.)))/(1.-exp(-2.4));
+     float jetSide=delta.y<0.?-1.:1.;
+     if(abs(delta.y)<.15*(2.*uHalf/49.))jetSide=aSeed<.5?-1.:1.;
+     float jetDistance=(12.+4.*aSeed)*jetProgress,jetAngle=jetSide*.9*jetProgress;
+     float cs=cos(jetAngle),sn=sin(jetAngle),spread=1.+.18*jetProgress;
+     renderedPosition=uInfluenceCenter+vec3((cs*delta.x-sn*delta.z)*spread,delta.y+jetSide*jetDistance,(sn*delta.x+cs*delta.z)*spread);
+     float tipFade=smoothstep(.75,1.,jetProgress);
+     vCollapseFade=1.-tipFade;
+     collapseSize=mix(1.,.7,tipFade);
    }else{
      float maxRadius=length(vec3(uHalf)+abs(uInfluenceCenter))+1.8*(2.*uHalf/49.);
      float sweepRadius=maxRadius*(24./22.);
