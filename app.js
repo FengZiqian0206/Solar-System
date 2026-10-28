@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-15';
+import { createRoaming } from './roaming.js?v=grid-roam-16';
 import { createPointInfluence } from './point-influence.js?v=6';
 
 const PLANETS = [
@@ -109,7 +109,7 @@ void main(){
    float initialRadius=length(delta),coreRadius=2.1*(2.*uHalf/49.);
    if(initialRadius<=coreRadius){
      // The original coloured core fades slowly; arriving particles are swallowed separately.
-     vCollapseFade=1.-smoothstep(0.,1.,uCollapse);
+     vCollapseFade=1.-smoothstep(0.,.5,uCollapse);
      collapseSize=mix(1.,.65,uCollapse);
    }else{
      float maxRadius=length(vec3(uHalf)+abs(uInfluenceCenter))+1.8*(2.*uHalf/49.);

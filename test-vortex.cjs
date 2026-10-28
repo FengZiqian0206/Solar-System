@@ -9,7 +9,7 @@ const {chromium}=require('playwright');
   const browser=await chromium.launch({channel:'msedge',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'solar-vortex-'));
   const url=process.argv[2]||'http://127.0.0.1:4194/';
-  const report={desktop:null,mobile:[],screenshots:output};
+  const report={desktop:null,mobile:[],completionExits:[],screenshots:output};
   async function open(profile){
     const context=await browser.newContext({viewport:{width:profile.width,height:profile.height},isMobile:!!profile.mobile,hasTouch:!!profile.mobile,deviceScaleFactor:1});
     const page=await context.newPage(),errors=[],failed=[];
@@ -96,9 +96,47 @@ const {chromium}=require('playwright');
           const point=probe(48,index/100);
           return {progress:point.progress,angle:Math.atan2(-point.top.y,point.front.x),radius:point.radius,alpha:point.front.maxAlpha};
         });
-        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.35,.8,1].map(progress=>({progress,...sample(0,progress)})),coreNeighbour:[0,.35,.8].map(progress=>probe(1,progress)),rotation};
+        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.2,.4,.5,1].map(progress=>({progress,...sample(0,progress)})),coreNeighbour:[0,.2,.4].map(progress=>probe(1,progress)),rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
+  }
+  async function completionExitCase(mode){
+    // Exercise the real controller with its public clock; no GPU, app loop or production debug hooks.
+    const mobile=mode==='mobile-hud-tap';
+    const context=await browser.newContext({viewport:{width:mobile?390:1280,height:mobile?844:900},isMobile:mobile,hasTouch:mobile});
+    const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
+    try{
+      await page.route('**/*',route=>route.request().isNavigationRequest()?route.fulfill({contentType:'text/html',body:'<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="./style.css"><section id="hologram" class="hologram"><div id="viewport"><canvas id="canvas"></canvas></div></section>'}):route.continue());
+      await page.goto(url);
+      await page.evaluate(async()=>{
+        const [THREE,{createRoaming}]=await Promise.all([import(new URL('./vendor/three/three.module.js',location.href).href),import(new URL('./roaming.js',location.href).href)]);
+        const viewport=document.querySelector('#viewport');
+        viewport.requestPointerLock=()=>Promise.reject(new Error('QA component CSS mode'));
+        document.querySelector('#hologram').requestFullscreen=()=>Promise.reject(new Error('QA component CSS mode'));
+        window.qaController=createRoaming({THREE,camera:new THREE.PerspectiveCamera(48,1,.1,500),viewport,getEarth:()=>({pos:new THREE.Vector3(2,0,0)}),half:26,step:52/49,onStart(){}});
+        await window.qaController.enter({automatic:true});
+      });
+      await page.keyboard.down('Space');
+      await page.evaluate(()=>window.qaController.update(.1,12));
+      const rect=await page.locator('#viewport').boundingBox(),point={x:rect.x+rect.width*.5,y:rect.y+rect.height*.4};
+      if(mobile)await page.touchscreen.tap(point.x,point.y);else await page.mouse.click(point.x,point.y);
+      await page.keyboard.down('Space');
+      assert.equal(await page.evaluate(()=>window.qaController.active&&window.qaController.collapseProgress===.5),true,'Clicks and repeated Space do not dismiss an in-progress vortex');
+      await page.evaluate(()=>window.qaController.update(.1,12));
+      assert.equal(await page.evaluate(()=>window.qaController.collapseProgress),1);
+      if(mode==='desktop-background-doubleclick')await page.mouse.dblclick(point.x,point.y);
+      else{
+        const target=await page.locator(mobile?'#roamCollapseHint':'#roamForward').boundingBox(),x=target.x+target.width/2,y=target.y+target.height/2;
+        if(mobile)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
+      }
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      assert.equal(await page.evaluate(()=>window.qaController.active),false,'A new click/tap dismisses the completed vortex');
+      assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),false);
+      assert.equal(await page.evaluate(()=>document.fullscreenElement),null);
+      assert.equal(await page.evaluate(()=>window.qaController.collapseProgress),0,'Exit resets collapse state');
+      assert.deepEqual(errors,[]);
+      return {mode,checks:['in-progress input cannot exit','completion click/tap exits CSS fullscreen','HUD coordinates accepted','same gesture cannot re-enter']};
+    }finally{await context.close();}
   }
   try{
     const desktop=await open({width:1280,height:900}),page=desktop.page;
@@ -115,9 +153,10 @@ const {chromium}=require('playwright');
       assert.ok(shader.entry[0].radius>shader.coreRadius+.3&&Math.abs(shader.entry[0].front.maxAlpha-shader.near[0].front.maxAlpha)<=1,'An approaching point remains opaque before core entry');
       assert.ok(shader.entry[1].radius<=shader.coreRadius+.25&&shader.entry[1].front.maxAlpha>0&&shader.entry[1].front.maxAlpha<shader.entry[0].front.maxAlpha,'A point only begins fading after entering the core');
       assert.equal(shader.entry[2].front.weight,0,'An absorbed point eventually disappears');
-      assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].maxAlpha<shader.core[0].maxAlpha&&shader.core[1].maxAlpha>shader.core[2].maxAlpha&&shader.core[2].weight>0,'Original core fades gradually throughout the sequence');
+      assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].maxAlpha<shader.core[0].maxAlpha&&shader.core[1].maxAlpha>shader.core[2].maxAlpha&&shader.core[2].weight>0,'Original core fades gradually during the first twelve seconds');
       assert.ok(shader.coreNeighbour.every(point=>point.radius>.6&&Math.abs(point.front.x-shader.coreNeighbour[0].front.x)<.15&&Math.abs(point.top.y-shader.coreNeighbour[0].top.y)<.15),'Original core neighbours retain their positions while fading');
-      assert.equal(shader.far[3].front.weight,0);assert.equal(shader.far[3].top.weight,0);assert.equal(shader.core[3].weight,0,'All particles, including the selected point, vanish by completion');
+      assert.equal(shader.core[3].weight,0,'Original core has disappeared by progress .5, while far exterior points were still opaque at .35');
+      assert.equal(shader.far[3].front.weight,0);assert.equal(shader.far[3].top.weight,0);assert.equal(shader.core[4].weight,0,'All particles, including the selected point, vanish by completion');
       let cumulativeRotation=0,largestRotationStep=0;
       for(let index=1;index<shader.rotation.length;index++){
         const difference=shader.rotation[index].angle-shader.rotation[index-1].angle,step=Math.atan2(Math.sin(difference),Math.cos(difference));
@@ -141,7 +180,7 @@ const {chromium}=require('playwright');
       await page.keyboard.down('Space'); // A repeat must not restart the animation.
       await page.keyboard.up('w');await page.keyboard.down('w');
       assert.equal(await page.locator('#roamForward').getAttribute('aria-pressed'),'false','W cannot resume movement during collapse');
-      await page.keyboard.up('w');await page.keyboard.up('Space');
+      await page.keyboard.up('w'); // Keep Space held until the animation has finished.
       await page.waitForFunction(()=>window.qaVortex.progress>=.05);
       await page.screenshot({path:path.join(output,'desktop-1-early.png')});
       const beforeLook=await page.evaluate(()=>window.qaVortex);
@@ -151,6 +190,7 @@ const {chromium}=require('playwright');
       await page.mouse.wheel(0,-300);
       await page.waitForFunction(previous=>Math.abs(Math.hypot(...window.qaVortex.camera.map((v,i)=>v-window.qaVortex.travel[i]))-previous)>.1,Math.hypot(...beforeZoom.camera.map((v,i)=>v-beforeZoom.travel[i])));
       await page.waitForFunction(()=>window.qaVortex.progress>=.4);
+      await page.keyboard.down('Space');
       await page.screenshot({path:path.join(output,'desktop-2-middle.png')});
       assert.deepEqual(await page.evaluate(()=>window.qaVortex.travel),started.travel,'Collapse freezes continuous movement');
       await page.waitForFunction(()=>window.qaVortex.progress>=.8);
@@ -165,12 +205,15 @@ const {chromium}=require('playwright');
       assert.equal(completed.state.calls,1);assert.equal(completed.state.points,125000);
       const completePixels=await scenePixels(page);
       assert.equal(completePixels.lit,0,'Only the scene, excluding HTML HUD, becomes black');assert.ok(completePixels.maxRGB<=1);
-      await page.keyboard.press('Space');
-      assert.equal(await page.evaluate(()=>window.qaVortex.progress),1,'Finished animation is one-shot for this roaming session');
-      await page.keyboard.press('Escape');
-      await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement);
+      await page.keyboard.down('Space');
+      assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true,'Held Space repeat does not dismiss completion');
+      assert.equal(await page.evaluate(()=>window.qaVortex.progress),1);
+      await page.keyboard.up('Space');await page.keyboard.press('Space');
+      await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement&&!document.pointerLockElement);
+      const exitedAt=await page.evaluate(()=>performance.now());
+      await page.waitForFunction(time=>performance.now()>time+550,exitedAt);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,shader,nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','original core fades gradually','W then Space stops movement','one-shot and repeat safety','camera look and wheel during collapse','unpaused early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits and influence','immutable base coordinates','completed scene black','exit and re-entry reset']};
+      report.desktop={beforePixels,completePixels,shader,nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','original core fades within twelve seconds','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits and influence','immutable base coordinates','completed scene black','exit and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 
@@ -206,6 +249,7 @@ const {chromium}=require('playwright');
         report.mobile.push({viewport,layout,checks:['safe action layout','Space tap with W held','movement stops','exit works during animation']});
       }finally{await mobile.context.close();}
     }
+    for(const mode of ['desktop-background-doubleclick','desktop-disabled-hud-click','mobile-hud-tap'])report.completionExits.push(await completionExitCase(mode));
     console.log(JSON.stringify({passed:true,...report}));
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});
