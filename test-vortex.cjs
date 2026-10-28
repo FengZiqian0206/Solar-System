@@ -29,7 +29,16 @@ const {chromium}=require('playwright');
           window.qaCloud=this;window.qaRenderer=renderer;window.qaScene=scene;window.qaCamera=camera;
           window.qaVortex={active:u.uRoam.value,progress:u.uCollapse.value,time:u.uTime.value,wall:performance.now(),travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),bodies:u.uBodies.value.flatMap(body=>body.toArray()),calls:renderer.info.render.calls,points:renderer.info.render.points,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,dpr:renderer.getPixelRatio()};
           if(u.uRoam.value&&u.uCollapse.value>0){
-            if(!window.qaFrozen)window.qaFrozen={bodies:window.qaVortex.bodies.slice(),travel:window.qaVortex.travel.slice(),tint:this.geometry.attributes.aPlayerTint.array.slice(),offset:this.geometry.attributes.aPlayerOffset.array.slice()};
+            if(!window.qaFrozen){
+              const attributes=this.geometry.attributes,base=attributes.position.array,offset=attributes.aPlayerOffset.array,delay=attributes.aJetDelay.array,coreSchedule=[];
+              for(let index=0;index<attributes.position.count;index++){
+                const q=index*3,pinned=Math.hypot(base[q]-u.uPlayer.value.x,base[q+1]-u.uPlayer.value.y,base[q+2]-u.uPlayer.value.z)<.01;
+                const distance=Math.hypot(base[q]+(pinned?0:offset[q])-u.uInfluenceCenter.value.x,base[q+1]+(pinned?0:offset[q+1])-u.uInfluenceCenter.value.y,base[q+2]+(pinned?0:offset[q+2])-u.uInfluenceCenter.value.z);
+                if(distance<=2.1*2*u.uHalf.value/49)coreSchedule.push({index,distance,delay:delay[index]});
+              }
+              coreSchedule.sort((a,b)=>a.distance-b.distance||a.index-b.index);
+              window.qaFrozen={bodies:window.qaVortex.bodies.slice(),travel:window.qaVortex.travel.slice(),tint:attributes.aPlayerTint.array.slice(),offset:offset.slice(),jetDelay:delay.slice(),coreSchedule};
+            }
             window.qaVortexHistory.push({progress:u.uCollapse.value,wall:performance.now()});
           }
           if(u.uRoam.value&&!window.qaVortexReady){window.qaVortexReady=true;console.log('QA_VORTEX_READY');}
@@ -69,11 +78,13 @@ const {chromium}=require('playwright');
       geometry.setAttribute('position',new THREE.Float32BufferAttribute([16,12,0],3));
       geometry.setAttribute('aSeed',new THREE.Float32BufferAttribute([.5],1));
       geometry.setAttribute('aPlayerTint',new THREE.Float32BufferAttribute([.95],1));
+      geometry.setAttribute('aJetDelay',new THREE.Float32BufferAttribute([0],1));
       const scene=new THREE.Scene(),point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
       const camera=new THREE.OrthographicCamera(-64,64,64,-64,.1,400),target=new THREE.WebGLRenderTarget(512,512),pixels=new Uint8Array(512*512*4);
       const previous=renderer.getRenderTarget(),clear=renderer.getClearColor(new THREE.Color()),clearAlpha=renderer.getClearAlpha();
-      function sample(radius,progress,top=false){
+      function sample(radius,progress,top=false,delay=0){
         material.uniforms.uCollapse.value=progress;
+        geometry.attributes.aJetDelay.setX(0,delay);geometry.attributes.aJetDelay.needsUpdate=true;
         const delta=Array.isArray(radius)?radius:[radius,0,0];
         geometry.attributes.position.setXYZ(0,delta[0],12+delta[1],delta[2]);geometry.attributes.position.needsUpdate=true;
         camera.up.set(0,top?0:1,top?-1:0);camera.position.set(0,top?172:12,top?0:160);camera.lookAt(0,12,0);
@@ -85,8 +96,8 @@ const {chromium}=require('playwright');
         }
         return {weight,maxAlpha,x:weight?(x/weight+.5-256)/4:null,y:weight?(y/weight+.5-256)/4:null};
       }
-      function probe(radius,progress){
-        const front=sample(radius,progress),top=sample(radius,progress,true);
+      function probe(radius,progress,delay=0){
+        const front=sample(radius,progress,false,delay),top=sample(radius,progress,true,delay);
         const position=front.weight&&top.weight?[front.x,front.y,-top.y]:null;
         return {progress,front,top,position,radius:position?Math.hypot(...position):null};
       }
@@ -98,9 +109,9 @@ const {chromium}=require('playwright');
           const point=probe(48,index/100);
           return {progress:point.progress,angle:Math.atan2(-point.top.y,point.front.x),radius:point.radius,alpha:point.front.maxAlpha};
         });
-        const jetTimes=[0,.00001,.025,.075,.2,.25,.35,.5];
+        const preparation=.25/24,jetTimes=[0,.00001,.025+preparation,.075+preparation,.2+preparation,.25+preparation,.35+preparation,.5+preparation];
         const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
-        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.2,.35,.5,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},rotation};
+        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.2+preparation,.35+preparation,.5+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
   }
@@ -161,18 +172,21 @@ const {chromium}=require('playwright');
       for(const [direction,points] of Object.entries(shader.jets)){
         const side=direction==='upper'?1:-1;
         assert.ok(Math.hypot(...points[1].position.map((value,index)=>value-points[0].position[index]))<.35,'Jet starts continuously at its existing grid position');
+        assert.ok(points.slice(2,7).every(point=>point.position&&Math.hypot(point.position[0],point.position[2])<.15),'Gathered particles travel on the common world-Y centre axis');
         assert.ok(side*(points[4].position[1]-points[0].position[1])>8,'Core particles eject clearly along both positive and negative world Y');
         const early=(side*(points[3].position[1]-points[2].position[1]))/((points[3].progress-points[2].progress)*24);
         const late=(side*(points[5].position[1]-points[4].position[1]))/((points[5].progress-points[4].progress)*24);
         assert.ok(early>late*1.5&&late>0,'Equal-time GPU position samples show the jet decelerating');
-        const beforeFade=side*(points[4].position[1]-points[0].position[1]),duringFade=side*(points[6].position[1]-points[0].position[1]);
+        const beforeFade=side*points[4].position[1],duringFade=side*points[6].position[1];
         assert.ok(beforeFade<14*.75&&Math.abs(points[4].alpha-points[0].alpha)<=1,'Jet keeps full opacity before travelling 75% of its range');
         assert.ok(duringFade>14*.75&&duringFade<14&&points[6].alpha>0&&points[6].alpha<points[4].alpha,'Jet fades only in the final distance segment');
-        assert.equal(points[7].weight,0,'Jet vanishes after its twelve-second trip');
+        assert.equal(points[7].weight,0,'Jet vanishes after preparation and its twelve-second trip');
         jetSpeeds[direction]={early,late,beforeFade,duringFade};
       }
       assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].y>8&&Math.abs(shader.core[1].maxAlpha-shader.core[0].maxAlpha)<=1&&shader.core[2].maxAlpha<shader.core[1].maxAlpha&&shader.core[2].weight>0,'Selected core point also travels with the jet and fades by distance');
-      assert.equal(shader.core[3].weight,0,'Original core jets have disappeared by progress .5, while far exterior points were still opaque at .35');
+      assert.equal(shader.core[3].weight,0,'A zero-delay core jet disappears after its preparation plus twelve-second trip');
+      assert.ok(Math.hypot(...shader.sequence.waiting.position.map((value,index)=>value-shader.jets.upper[0].position[index]))<.35&&shader.sequence.waiting.front.maxAlpha===shader.jets.upper[0].alpha,'A particle remains at its original position and opacity until its own launch delay');
+      assert.ok(shader.sequence.first.position[1]>shader.sequence.waiting.position[1]+.8&&shader.sequence.later.position[1]>shader.sequence.waiting.position[1]+.8,'Different delays produce distinct launch times');
       assert.equal(shader.far[3].front.weight,0);assert.equal(shader.far[3].top.weight,0);assert.equal(shader.core[4].weight,0,'All particles, including the selected point, vanish by completion');
       let cumulativeRotation=0,largestRotationStep=0;
       for(let index=1;index<shader.rotation.length;index++){
@@ -190,6 +204,11 @@ const {chromium}=require('playwright');
       await page.keyboard.down('Space');
       await page.waitForFunction(()=>window.qaVortex.progress>0);
       const started=await page.evaluate(()=>window.qaVortex);
+      const jetSchedule=await page.evaluate(()=>({core:window.qaFrozen.coreSchedule,attributeCount:window.qaCloud.geometry.attributes.aJetDelay.count,itemSize:window.qaCloud.geometry.attributes.aJetDelay.itemSize,bytes:window.qaCloud.geometry.attributes.aJetDelay.array.byteLength}));
+      assert.equal(jetSchedule.attributeCount,125000);assert.equal(jetSchedule.itemSize,1);assert.equal(jetSchedule.bytes,500000);
+      assert.ok(jetSchedule.core.length>1&&new Set(jetSchedule.core.map(point=>point.delay)).size===jetSchedule.core.length,'Each current core particle has a unique launch slot');
+      const jetSpacing=Math.min(.14,8/Math.max(1,jetSchedule.core.length-1));
+      assert.ok(jetSchedule.core.every((point,rank)=>Math.abs(point.delay-rank*jetSpacing)<.000002),'Launch slots follow distance/index order with regular spacing');
       assert.equal(await page.locator('#roamForward').isDisabled(),true);
       assert.equal(await page.locator('#roamCollapse').isDisabled(),true);
       assert.equal(await page.locator('#roamForward').getAttribute('aria-pressed'),'false');
@@ -218,11 +237,11 @@ const {chromium}=require('playwright');
       await page.screenshot({path:path.join(output,'desktop-3-late.png')});
       await page.waitForFunction(()=>window.qaVortex.progress===1,null,{timeout:30000});
       await page.screenshot({path:path.join(output,'desktop-4-complete.png')});
-      const completed=await page.evaluate(()=>({state:window.qaVortex,history:window.qaVortexHistory.slice(),elapsed:(window.qaVortexHistory.find(frame=>frame.progress===1).wall-window.qaTriggerWall)/1000,baseIntact:window.qaBasePositions.every((value,index)=>value===window.qaCloud.geometry.attributes.position.array[index]),frozenTint:window.qaFrozen.tint.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerTint.array[index]),frozenOffsets:window.qaFrozen.offset.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerOffset.array[index]),frozenBodies:window.qaFrozen.bodies.every((value,index)=>value===window.qaVortex.bodies[index])}));
+      const completed=await page.evaluate(()=>({state:window.qaVortex,history:window.qaVortexHistory.slice(),elapsed:(window.qaVortexHistory.find(frame=>frame.progress===1).wall-window.qaTriggerWall)/1000,baseIntact:window.qaBasePositions.every((value,index)=>value===window.qaCloud.geometry.attributes.position.array[index]),frozenTint:window.qaFrozen.tint.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerTint.array[index]),frozenOffsets:window.qaFrozen.offset.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerOffset.array[index]),frozenJetDelay:window.qaFrozen.jetDelay.every((value,index)=>value===window.qaCloud.geometry.attributes.aJetDelay.array[index]),frozenBodies:window.qaFrozen.bodies.every((value,index)=>value===window.qaVortex.bodies[index])}));
       assert.ok(completed.history.length>10);
       assert.ok(completed.elapsed>=22&&completed.elapsed<=29,'Staggered vortex completes in about twenty-four real seconds');
       assert.ok(completed.history.every((frame,index,frames)=>frame.progress>=0&&frame.progress<=1&&(index===0||frame.progress>=frames[index-1].progress)),'Progress stays bounded and never restarts');
-      assert.equal(completed.baseIntact,true);assert.equal(completed.frozenTint,true);assert.equal(completed.frozenOffsets,true);assert.equal(completed.frozenBodies,true);
+      assert.equal(completed.baseIntact,true);assert.equal(completed.frozenTint,true);assert.equal(completed.frozenOffsets,true);assert.equal(completed.frozenJetDelay,true);assert.equal(completed.frozenBodies,true);
       assert.equal(completed.state.calls,1);assert.equal(completed.state.points,125000);
       const completePixels=await scenePixels(page);
       assert.equal(completePixels.lit,0,'Only the scene, excluding HTML HUD, becomes black');assert.ok(completePixels.maxRGB<=1);
@@ -234,7 +253,7 @@ const {chromium}=require('playwright');
       const exitedAt=await page.evaluate(()=>performance.now());
       await page.waitForFunction(time=>performance.now()>time+550,exitedAt);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,shader,jetSpeeds,nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','continuous bidirectional decelerating core jets / distance fade within twelve seconds','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits and influence','immutable base coordinates','completed scene black','exit and re-entry reset']};
+      report.desktop={beforePixels,completePixels,shader,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration / distance fade','unique regularly spaced current-core launch slots','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits, influence and launch schedule','immutable base coordinates','completed scene black','exit and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 

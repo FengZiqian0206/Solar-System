@@ -1,5 +1,5 @@
 // One optional camera mode; the overview's orbit, zoom and follow state stay untouched.
-export function createRoaming({ THREE, camera, viewport, getEarth, half, step, onStart }) {
+export function createRoaming({ THREE, camera, viewport, getEarth, half, step, onStart, onCollapse }) {
   const hologram = document.querySelector('#hologram');
   const cursor = document.createElement('div');
   cursor.id = 'rainbowCursor';
@@ -44,7 +44,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   }
   function startCollapse() {
     if(!active || collapseElapsed>=0)return;
-    stopMovement();collapseElapsed=0;
+    stopMovement();onCollapse?.();collapseElapsed=0;
     forwardButton.disabled=true;collapseButton.disabled=true;
     collapseButton.classList.add('is-held');collapseButton.setAttribute('aria-pressed','true');
   }
