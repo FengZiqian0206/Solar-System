@@ -74,7 +74,8 @@ const {chromium}=require('playwright');
       const previous=renderer.getRenderTarget(),clear=renderer.getClearColor(new THREE.Color()),clearAlpha=renderer.getClearAlpha();
       function sample(radius,progress,top=false){
         material.uniforms.uCollapse.value=progress;
-        geometry.attributes.position.setXYZ(0,radius,12,0);geometry.attributes.position.needsUpdate=true;
+        const delta=Array.isArray(radius)?radius:[radius,0,0];
+        geometry.attributes.position.setXYZ(0,delta[0],12+delta[1],delta[2]);geometry.attributes.position.needsUpdate=true;
         camera.up.set(0,top?0:1,top?-1:0);camera.position.set(0,top?172:12,top?0:160);camera.lookAt(0,12,0);
         renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);
         renderer.readRenderTargetPixels(target,0,0,512,512,pixels);
@@ -86,7 +87,8 @@ const {chromium}=require('playwright');
       }
       function probe(radius,progress){
         const front=sample(radius,progress),top=sample(radius,progress,true);
-        return {progress,front,top,radius:front.weight&&top.weight?Math.hypot(front.x,front.y,top.y):null};
+        const position=front.weight&&top.weight?[front.x,front.y,-top.y]:null;
+        return {progress,front,top,position,radius:position?Math.hypot(...position):null};
       }
       try{
         const half=material.uniforms.uHalf.value,center=material.uniforms.uInfluenceCenter.value;
@@ -96,7 +98,9 @@ const {chromium}=require('playwright');
           const point=probe(48,index/100);
           return {progress:point.progress,angle:Math.atan2(-point.top.y,point.front.x),radius:point.radius,alpha:point.front.maxAlpha};
         });
-        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.2,.4,.5,1].map(progress=>({progress,...sample(0,progress)})),coreNeighbour:[0,.2,.4].map(progress=>probe(1,progress)),rotation};
+        const jetTimes=[0,.00001,.025,.075,.2,.25,.35,.5];
+        const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
+        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.2,.35,.5,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
   }
@@ -153,9 +157,22 @@ const {chromium}=require('playwright');
       assert.ok(shader.entry[0].radius>shader.coreRadius+.3&&Math.abs(shader.entry[0].front.maxAlpha-shader.near[0].front.maxAlpha)<=1,'An approaching point remains opaque before core entry');
       assert.ok(shader.entry[1].radius<=shader.coreRadius+.25&&shader.entry[1].front.maxAlpha>0&&shader.entry[1].front.maxAlpha<shader.entry[0].front.maxAlpha,'A point only begins fading after entering the core');
       assert.equal(shader.entry[2].front.weight,0,'An absorbed point eventually disappears');
-      assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].maxAlpha<shader.core[0].maxAlpha&&shader.core[1].maxAlpha>shader.core[2].maxAlpha&&shader.core[2].weight>0,'Original core fades gradually during the first twelve seconds');
-      assert.ok(shader.coreNeighbour.every(point=>point.radius>.6&&Math.abs(point.front.x-shader.coreNeighbour[0].front.x)<.15&&Math.abs(point.top.y-shader.coreNeighbour[0].top.y)<.15),'Original core neighbours retain their positions while fading');
-      assert.equal(shader.core[3].weight,0,'Original core has disappeared by progress .5, while far exterior points were still opaque at .35');
+      const jetSpeeds={};
+      for(const [direction,points] of Object.entries(shader.jets)){
+        const side=direction==='upper'?1:-1;
+        assert.ok(Math.hypot(...points[1].position.map((value,index)=>value-points[0].position[index]))<.35,'Jet starts continuously at its existing grid position');
+        assert.ok(side*(points[4].position[1]-points[0].position[1])>8,'Core particles eject clearly along both positive and negative world Y');
+        const early=(side*(points[3].position[1]-points[2].position[1]))/((points[3].progress-points[2].progress)*24);
+        const late=(side*(points[5].position[1]-points[4].position[1]))/((points[5].progress-points[4].progress)*24);
+        assert.ok(early>late*1.5&&late>0,'Equal-time GPU position samples show the jet decelerating');
+        const beforeFade=side*(points[4].position[1]-points[0].position[1]),duringFade=side*(points[6].position[1]-points[0].position[1]);
+        assert.ok(beforeFade<14*.75&&Math.abs(points[4].alpha-points[0].alpha)<=1,'Jet keeps full opacity before travelling 75% of its range');
+        assert.ok(duringFade>14*.75&&duringFade<14&&points[6].alpha>0&&points[6].alpha<points[4].alpha,'Jet fades only in the final distance segment');
+        assert.equal(points[7].weight,0,'Jet vanishes after its twelve-second trip');
+        jetSpeeds[direction]={early,late,beforeFade,duringFade};
+      }
+      assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].y>8&&Math.abs(shader.core[1].maxAlpha-shader.core[0].maxAlpha)<=1&&shader.core[2].maxAlpha<shader.core[1].maxAlpha&&shader.core[2].weight>0,'Selected core point also travels with the jet and fades by distance');
+      assert.equal(shader.core[3].weight,0,'Original core jets have disappeared by progress .5, while far exterior points were still opaque at .35');
       assert.equal(shader.far[3].front.weight,0);assert.equal(shader.far[3].top.weight,0);assert.equal(shader.core[4].weight,0,'All particles, including the selected point, vanish by completion');
       let cumulativeRotation=0,largestRotationStep=0;
       for(let index=1;index<shader.rotation.length;index++){
@@ -183,6 +200,10 @@ const {chromium}=require('playwright');
       await page.keyboard.up('w'); // Keep Space held until the animation has finished.
       await page.waitForFunction(()=>window.qaVortex.progress>=.05);
       await page.screenshot({path:path.join(output,'desktop-1-early.png')});
+      await page.waitForFunction(()=>window.qaVortex.progress>=.15);
+      await page.screenshot({path:path.join(output,'desktop-jets-1.png')});
+      await page.waitForFunction(()=>window.qaVortex.progress>=.25);
+      await page.screenshot({path:path.join(output,'desktop-jets-2.png')});
       const beforeLook=await page.evaluate(()=>window.qaVortex);
       await page.mouse.move(700,300,{steps:3});
       await page.waitForFunction(q=>window.qaVortex.quaternion.some((v,i)=>Math.abs(v-q[i])>.01),beforeLook.quaternion);
@@ -213,7 +234,7 @@ const {chromium}=require('playwright');
       const exitedAt=await page.evaluate(()=>performance.now());
       await page.waitForFunction(time=>performance.now()>time+550,exitedAt);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,shader,nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','original core fades within twelve seconds','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits and influence','immutable base coordinates','completed scene black','exit and re-entry reset']};
+      report.desktop={beforePixels,completePixels,shader,jetSpeeds,nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','continuous bidirectional decelerating core jets / distance fade within twelve seconds','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits and influence','immutable base coordinates','completed scene black','exit and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 
