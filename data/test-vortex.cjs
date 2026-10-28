@@ -109,9 +109,9 @@ const {chromium}=require('playwright');
           const point=probe(48,index/100);
           return {progress:point.progress,angle:Math.atan2(-point.top.y,point.front.x),radius:point.radius,alpha:point.front.maxAlpha};
         });
-        const preparation=.25/24,jetTimes=[0,.00001,.025+preparation,.075+preparation,.2+preparation,.25+preparation,.35+preparation,.5+preparation];
+        const preparation=.25/24,jetTimes=[0,.00001,.3/24+preparation,.9/24+preparation,2.5/24+preparation,3.1/24+preparation,4/24+preparation];
         const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
-        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.2+preparation,.35+preparation,.5+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
+        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
   }
@@ -172,19 +172,21 @@ const {chromium}=require('playwright');
       for(const [direction,points] of Object.entries(shader.jets)){
         const side=direction==='upper'?1:-1;
         assert.ok(Math.hypot(...points[1].position.map((value,index)=>value-points[0].position[index]))<.35,'Jet starts continuously at its existing grid position');
-        assert.ok(points.slice(2,7).every(point=>point.position&&Math.hypot(point.position[0],point.position[2])<.15),'Gathered particles travel on the common world-Y centre axis');
-        assert.ok(side*(points[4].position[1]-points[0].position[1])>8,'Core particles eject clearly along both positive and negative world Y');
+        assert.ok(points.slice(2,6).every(point=>point.position&&Math.hypot(point.position[0],point.position[2])<.15),'Gathered particles travel on the common world-Y centre axis');
+        assert.ok(side*points[4].position[1]>4,'Core particles eject clearly along both positive and negative world Y');
         const early=(side*(points[3].position[1]-points[2].position[1]))/((points[3].progress-points[2].progress)*24);
         const late=(side*(points[5].position[1]-points[4].position[1]))/((points[5].progress-points[4].progress)*24);
-        assert.ok(early>late*1.5&&late>0,'Equal-time GPU position samples show the jet decelerating');
-        const beforeFade=side*points[4].position[1],duringFade=side*points[6].position[1];
-        assert.ok(beforeFade<14*.75&&Math.abs(points[4].alpha-points[0].alpha)<=1,'Jet keeps full opacity before travelling 75% of its range');
-        assert.ok(duringFade>14*.75&&duringFade<14&&points[6].alpha>0&&points[6].alpha<points[4].alpha,'Jet fades only in the final distance segment');
-        assert.equal(points[7].weight,0,'Jet vanishes after preparation and its twelve-second trip');
-        jetSpeeds[direction]={early,late,beforeFade,duringFade};
+        assert.ok(early>late*1.3&&late>0,'Equal-time visible GPU samples show the jet decelerating');
+        assert.equal(points[6].weight,0,'Jet vanishes at four seconds of its own flight age');
+        jetSpeeds[direction]={early,late};
       }
-      assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].y>8&&Math.abs(shader.core[1].maxAlpha-shader.core[0].maxAlpha)<=1&&shader.core[2].maxAlpha<shader.core[1].maxAlpha&&shader.core[2].weight>0,'Selected core point also travels with the jet and fades by distance');
-      assert.equal(shader.core[3].weight,0,'A zero-delay core jet disappears after its preparation plus twelve-second trip');
+      const ageAlpha=shader.ages.samples.map(point=>point.front.maxAlpha);
+      assert.ok(Math.abs(ageAlpha[0]-ageAlpha[1])<=1&&Math.abs(ageAlpha[0]-ageAlpha[2])<=1,'A jet keeps full opacity through its first flight second');
+      assert.ok(ageAlpha[3]>0&&ageAlpha[3]<ageAlpha[2]&&shader.ages.samples[4].front.weight===0,'Each jet fades between one and four flight seconds');
+      assert.ok(shader.ages.sameGlobalDelayed.front.maxAlpha>ageAlpha[3]+30,'At the same global time, a later-fired younger jet remains brighter');
+      assert.ok(Math.abs(shader.ages.sameAgeDelayed.front.maxAlpha-ageAlpha[3])<=1&&Math.hypot(...shader.ages.sameAgeDelayed.position.map((value,index)=>value-shader.ages.samples[3].position[index]))<.2,'Different launch delays give the same position and opacity at equal flight ages');
+      assert.ok(shader.core[0].maxAlpha>150&&shader.core[1].y>1.5&&Math.abs(shader.core[1].maxAlpha-shader.core[0].maxAlpha)<=1&&shader.core[2].maxAlpha<shader.core[1].maxAlpha&&shader.core[2].weight>0,'Selected core point also follows the per-particle flight-age fade');
+      assert.equal(shader.core[3].weight,0,'A zero-delay core jet disappears after preparation plus four flight seconds');
       assert.ok(Math.hypot(...shader.sequence.waiting.position.map((value,index)=>value-shader.jets.upper[0].position[index]))<.35&&shader.sequence.waiting.front.maxAlpha===shader.jets.upper[0].alpha,'A particle remains at its original position and opacity until its own launch delay');
       assert.ok(shader.sequence.first.position[1]>shader.sequence.waiting.position[1]+.8&&shader.sequence.later.position[1]>shader.sequence.waiting.position[1]+.8,'Different delays produce distinct launch times');
       assert.equal(shader.far[3].front.weight,0);assert.equal(shader.far[3].top.weight,0);assert.equal(shader.core[4].weight,0,'All particles, including the selected point, vanish by completion');
@@ -253,7 +255,7 @@ const {chromium}=require('playwright');
       const exitedAt=await page.evaluate(()=>performance.now());
       await page.waitForFunction(time=>performance.now()>time+550,exitedAt);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,shader,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration / distance fade','unique regularly spaced current-core launch slots','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits, influence and launch schedule','immutable base coordinates','completed scene black','exit and re-entry reset']};
+      report.desktop={beforePixels,completePixels,shader,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits, influence and launch schedule','immutable base coordinates','completed scene black','exit and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 
