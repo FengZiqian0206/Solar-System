@@ -28,7 +28,7 @@
   }
   const timeout = setTimeout(() => showFailure('资源加载超时，请检查网络后重试。 · Loading timed out. Please retry.'), 20000);
   // Resolve against the page, not the classic script's possibly opaque origin.
-  const appUrl = new URL('./app.js?v=grid-roam-15', document.baseURI).href;
+  const appUrl = new URL('./app.js?v=grid-roam-16', document.baseURI).href;
   import(appUrl).then(app => {
     clearTimeout(timeout);
     panel.hidden = true;
