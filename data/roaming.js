@@ -9,9 +9,10 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   const hud = document.createElement('div');
   hud.id = 'roamHud';
   hud.hidden = true;
-  hud.innerHTML = '<span class="roam-instructions"><span class="roam-look-desktop">移动鼠标环顾 · MOVE MOUSE TO LOOK<br>滚轮缩放 · SCROLL TO ZOOM</span><span class="roam-look-touch">滑动环顾 · DRAG TO LOOK</span></span><button id="roamExit" type="button">退出漫游 · EXIT <kbd>Esc</kbd></button><div class="roam-forward"><button id="roamForward" type="button" aria-label="Hold W to move forward" aria-describedby="roamForwardHint" aria-keyshortcuts="W" aria-pressed="false">W</button><small id="roamForwardHint">HOLD W TO<br>MOVE FORWARD</small></div>';
+  hud.innerHTML = '<span class="roam-instructions"><span class="roam-look-desktop">移动鼠标环顾 · MOVE MOUSE TO LOOK<br>滚轮缩放 · SCROLL TO ZOOM</span><span class="roam-look-touch">滑动环顾 · DRAG TO LOOK</span></span><button id="roamExit" type="button">退出漫游 · EXIT <kbd>Esc</kbd></button><div class="roam-forward"><button id="roamForward" type="button" aria-label="Hold W to move forward" aria-describedby="roamForwardHint" aria-keyshortcuts="W" aria-pressed="false">W</button><small id="roamForwardHint">HOLD W TO<br>MOVE FORWARD</small></div><div class="roam-collapse"><button id="roamCollapse" type="button" aria-label="看看会发生什么 · See what happens" aria-describedby="roamCollapseHint" aria-keyshortcuts="Space" aria-pressed="false">SPACE</button><small id="roamCollapseHint">看看会发生什么<br><span>SEE WHAT HAPPENS</span></small></div>';
   hologram.append(hud);
   const forwardButton = hud.querySelector('#roamForward'), movementInputs = new Set();
+  const collapseButton = hud.querySelector('#roamCollapse');
   const notice = document.createElement('div');
   notice.id = 'roamNotice';
   notice.setAttribute('role', 'status');
@@ -23,8 +24,10 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   const offset = new THREE.Vector3(), forward = new THREE.Vector3(), orbitRotation = new THREE.Euler(0,0,0,'YXZ');
   let active = false, pending = false, enteredOnce = false, locked = false, moving = false, nativeFullscreen = false, yaw = Math.PI / 4, pitch = .24, distance = 48;
   let pointer = null, lookPointer = null, heldPointer = null, touchStart = null, lastTap = null, noticeTimer, lockPending = false;
+  let collapseElapsed = -1;
 
   function setForward(source, pressed) {
+    if(pressed && collapseElapsed>=0)return;
     if(pressed)movementInputs.add(source);else movementInputs.delete(source);
     moving=movementInputs.size>0;
     forwardButton.classList.toggle('is-held',moving);
@@ -34,6 +37,16 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     const id=heldPointer;heldPointer=null;
     movementInputs.clear();setForward('keyboard',false);
     if(id!==null && forwardButton.hasPointerCapture(id))forwardButton.releasePointerCapture(id);
+  }
+  function resetCollapse() {
+    collapseElapsed=-1;forwardButton.disabled=false;collapseButton.disabled=false;
+    collapseButton.classList.remove('is-held');collapseButton.setAttribute('aria-pressed','false');
+  }
+  function startCollapse() {
+    if(!active || collapseElapsed>=0)return;
+    stopMovement();collapseElapsed=0;
+    forwardButton.disabled=true;collapseButton.disabled=true;
+    collapseButton.classList.add('is-held');collapseButton.setAttribute('aria-pressed','true');
   }
 
   function snapToGrid() {
@@ -83,7 +96,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   }
   function leave() {
     if (!active) return;
-    active = false; locked = false; nativeFullscreen = false; stopMovement(); pointer = null; lookPointer = null;
+    active = false; locked = false; nativeFullscreen = false; stopMovement();resetCollapse(); pointer = null; lookPointer = null;
     hud.hidden = true;
     document.body.classList.remove('is-roaming', 'has-rainbow-cursor');
     hologram.classList.remove('is-roaming');
@@ -101,7 +114,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       if (!nativeFullscreen && !touchMode && !automatic) return;
       onStart();
       active = true; enteredOnce = true;pointer = null; yaw = Math.PI / 4; pitch = .24;
-      distance = 48; stopMovement(); lookPointer = null;
+      distance = 48; stopMovement();resetCollapse(); lookPointer = null;
       travel.copy(getEarth().pos); snapToGrid(); travel.copy(position);
       hud.hidden = false;
       document.body.classList.add('is-roaming');
@@ -115,7 +128,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     }
   }
   document.addEventListener('dblclick', event => {
-    if (event.target.closest('#roamExit,#roamForward')) return;
+    if (event.target.closest('#roamExit,#roamForward,#roamCollapse')) return;
     event.preventDefault();
     enter();
   });
@@ -182,7 +195,8 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') leave();
-    if (active && event.code === 'KeyW' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); if(!event.repeat)requestImmersive(true);setForward('keyboard',true); }
+    if(active && event.code==='Space' && !event.ctrlKey && !event.metaKey && !event.altKey){event.preventDefault();if(!event.repeat && collapseElapsed<0){requestImmersive(true);startCollapse();}}
+    if (active && event.code === 'KeyW' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); if(collapseElapsed<0){if(!event.repeat)requestImmersive(true);setForward('keyboard',true);} }
   });
   document.addEventListener('keyup', event => { if (event.code === 'KeyW') setForward('keyboard',false); });
   forwardButton.addEventListener('pointerdown',event=>{
@@ -197,20 +211,27 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       heldPointer=null;setForward('pointer',false);
     }
   });
-  forwardButton.addEventListener('keydown',event=>{if(active && (event.code==='Space'||event.code==='Enter')){event.preventDefault();setForward('button-key',true);}});
-  forwardButton.addEventListener('keyup',event=>{if(event.code==='Space'||event.code==='Enter'){event.preventDefault();setForward('button-key',false);}});
+  forwardButton.addEventListener('keydown',event=>{if(active && event.code==='Enter'){event.preventDefault();setForward('button-key',true);}});
+  forwardButton.addEventListener('keyup',event=>{if(event.code==='Enter'){event.preventDefault();setForward('button-key',false);}});
   forwardButton.addEventListener('blur',()=>setForward('button-key',false));
+  collapseButton.addEventListener('pointerdown',event=>{if(active && event.button===0){event.preventDefault();startCollapse();}});
+  collapseButton.addEventListener('pointerup',()=>{if(active && !nativeFullscreen)requestImmersive(true);});
+  collapseButton.addEventListener('click',startCollapse);
+  collapseButton.addEventListener('contextmenu',event=>event.preventDefault());
   hud.querySelector('#roamExit').addEventListener('click', leave);
   return {
     enter,
     get active() { return active; },
+    get collapsing() { return collapseElapsed>=0; },
+    get collapseProgress() { return collapseElapsed<0?0:Math.min(1,collapseElapsed/10); },
     get zoom() { return 78 / distance; },
     position,
     influencePosition: travel,
     wheel(delta) {
       distance = Math.max(6, Math.min(90, distance * (delta < 0 ? .9 : 1.1)));
     },
-    update(dt) {
+    update(dt, elapsed=dt) {
+      if(collapseElapsed>=0)collapseElapsed=Math.min(10,collapseElapsed+Math.max(0,elapsed));
       // If lock is refused, edge turning still permits continuous orbit without dragging.
       if(document.pointerLockElement!==viewport && pointer) {
         const edgeX=Math.max(0,(pointer.x-innerWidth+24)/24)-Math.max(0,(24-pointer.x)/24);
