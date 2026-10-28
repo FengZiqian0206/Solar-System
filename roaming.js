@@ -223,7 +223,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     enter,
     get active() { return active; },
     get collapsing() { return collapseElapsed>=0; },
-    get collapseProgress() { return collapseElapsed<0?0:Math.min(1,collapseElapsed/10); },
+    get collapseProgress() { return collapseElapsed<0?0:Math.min(1,collapseElapsed/24); },
     get zoom() { return 78 / distance; },
     position,
     influencePosition: travel,
@@ -231,7 +231,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       distance = Math.max(6, Math.min(90, distance * (delta < 0 ? .9 : 1.1)));
     },
     update(dt, elapsed=dt) {
-      if(collapseElapsed>=0)collapseElapsed=Math.min(10,collapseElapsed+Math.max(0,elapsed));
+      if(collapseElapsed>=0)collapseElapsed=Math.min(24,collapseElapsed+Math.max(0,elapsed));
       // If lock is refused, edge turning still permits continuous orbit without dragging.
       if(document.pointerLockElement!==viewport && pointer) {
         const edgeX=Math.max(0,(pointer.x-innerWidth+24)/24)-Math.max(0,(24-pointer.x)/24);
