@@ -111,14 +111,15 @@ void main(){
      // Gather and launch one point at a time along the common vertical nozzle.
      float launchTime=24.*uCollapse-aJetDelay;
      float gather=smoothstep(0.,.25,launchTime);
-     float jetProgress=(1.-exp(-.2*clamp(launchTime-.25,0.,12.)))/(1.-exp(-2.4));
+     float flightTime=max(0.,launchTime-.25);
+     float jetProgress=(1.-exp(-.2*min(flightTime,12.)))/(1.-exp(-2.4));
      float jetSide=delta.y<0.?-1.:1.;
      if(abs(delta.y)<.15*(2.*uHalf/49.))jetSide=aSeed<.5?-1.:1.;
      float jetDistance=(12.+4.*aSeed)*jetProgress;
      renderedPosition=uInfluenceCenter+delta*(1.-gather)+vec3(0.,jetSide*jetDistance,0.);
-     float tipFade=smoothstep(.75,1.,jetProgress);
-     vCollapseFade=1.-tipFade;
-     collapseSize=mix(1.,.7,tipFade);
+     float jetFade=smoothstep(1.,4.,flightTime);
+     vCollapseFade=1.-jetFade;
+     collapseSize=mix(1.,.7,jetFade);
    }else{
      float maxRadius=length(vec3(uHalf)+abs(uInfluenceCenter))+1.8*(2.*uHalf/49.);
      float sweepRadius=maxRadius*(24./22.);
