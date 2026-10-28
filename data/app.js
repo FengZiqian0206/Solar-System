@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-16';
+import { createRoaming } from './roaming.js?v=grid-roam-18';
 import { createPointInfluence } from './point-influence.js?v=6';
 
 const PLANETS = [
@@ -84,7 +84,7 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail,aPlayerTint; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
+attribute float aSeed,aDetail,aPlayerTint,aJetDelay; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
@@ -108,13 +108,14 @@ void main(){
    vec3 delta=renderedPosition-uInfluenceCenter;
    float initialRadius=length(delta),coreRadius=2.1*(2.*uHalf/49.);
    if(initialRadius<=coreRadius){
-     // Split the original coloured core into slowing polar jets; fade only near their tips.
-     float jetProgress=(1.-exp(-.2*min(24.*uCollapse,12.)))/(1.-exp(-2.4));
+     // Gather and launch one point at a time along the common vertical nozzle.
+     float launchTime=24.*uCollapse-aJetDelay;
+     float gather=smoothstep(0.,.25,launchTime);
+     float jetProgress=(1.-exp(-.2*clamp(launchTime-.25,0.,12.)))/(1.-exp(-2.4));
      float jetSide=delta.y<0.?-1.:1.;
      if(abs(delta.y)<.15*(2.*uHalf/49.))jetSide=aSeed<.5?-1.:1.;
-     float jetDistance=(12.+4.*aSeed)*jetProgress,jetAngle=jetSide*.9*jetProgress;
-     float cs=cos(jetAngle),sn=sin(jetAngle),spread=1.+.18*jetProgress;
-     renderedPosition=uInfluenceCenter+vec3((cs*delta.x-sn*delta.z)*spread,delta.y+jetSide*jetDistance,(sn*delta.x+cs*delta.z)*spread);
+     float jetDistance=(12.+4.*aSeed)*jetProgress;
+     renderedPosition=uInfluenceCenter+delta*(1.-gather)+vec3(0.,jetSide*jetDistance,0.);
      float tipFade=smoothstep(.75,1.,jetProgress);
      vCollapseFade=1.-tipFade;
      collapseSize=mix(1.,.7,tipFade);
@@ -164,10 +165,12 @@ function rebuild(){
   pointInfluence=createPointInfluence(n,half);
   geometry.setAttribute('aPlayerTint',new THREE.BufferAttribute(pointInfluence.values,1).setUsage(THREE.DynamicDrawUsage));
   geometry.setAttribute('aPlayerOffset',new THREE.BufferAttribute(pointInfluence.offsets,3).setUsage(THREE.DynamicDrawUsage));
+  geometry.setAttribute('aJetDelay',new THREE.BufferAttribute(new Float32Array(count),1).setUsage(THREE.DynamicDrawUsage));
   geometry.computeBoundingSphere();geometry.boundingSphere.radius+=step*1.8;
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:1},uBeltBoost:{value:gridSize===150?1:0},uZoom:{value:zoom},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()},uShadowDirs:{value:Array.from({length:9},()=>new THREE.Vector3())}}});
   material.defaultAttributeValues.aDetail=[0];
   material.defaultAttributeValues.aPlayerOffset=[0,0,0];
+  material.defaultAttributeValues.aJetDelay=[0];
   material.uniforms.uRoam={value:0};
   material.uniforms.uCollapse={value:0};
   material.uniforms.uPlayer={value:new THREE.Vector3()};
@@ -182,6 +185,22 @@ function rebuild(){
   }
   updateBodies();if(followPlanet>=0)zoom=followFitZoom();$('#pointCount').textContent=count.toLocaleString();
 }
+function prepareJets(){
+  const center=roaming.influencePosition,player=roaming.position,step=BODY_STEP_50,reach=4*step,radius=2.1*step;
+  const positions=geometry.attributes.position.array,offsets=pointInfluence.offsets,cells=[];
+  const lo=axis=>Math.max(0,Math.ceil((center[axis]-reach+VISUAL_HALF)/step));
+  const hi=axis=>Math.min(gridSize-1,Math.floor((center[axis]+reach+VISUAL_HALF)/step));
+  for(let x=lo('x');x<=hi('x');x++)for(let y=lo('y');y<=hi('y');y++)for(let z=lo('z');z<=hi('z');z++){
+    const index=(x*gridSize+y)*gridSize+z,q=index*3;
+    const pinned=Math.hypot(positions[q]-player.x,positions[q+1]-player.y,positions[q+2]-player.z)<.01;
+    const distance=Math.hypot(positions[q]+(pinned?0:offsets[q])-center.x,positions[q+1]+(pinned?0:offsets[q+1])-center.y,positions[q+2]+(pinned?0:offsets[q+2])-center.z);
+    if(distance<=radius)cells.push({index,distance});
+  }
+  cells.sort((a,b)=>a.distance-b.distance||a.index-b.index);
+  const spacing=Math.min(.14,8/Math.max(1,cells.length-1)),delays=geometry.attributes.aJetDelay;
+  cells.forEach((cell,rank)=>{delays.array[cell.index]=rank*spacing;});
+  delays.needsUpdate=true;
+}
 function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge);if(i>0)material.uniforms.uShadowDirs.value[i].copy(b.pos).sub(next[0].pos).normalize()});material.uniforms.uSaturn.value.copy(next[6].pos);updateBodyDetails()}
 function followFitZoom(){const b=bodies[followPlanet+1];return b?Math.min(22,78/Math.max(1.25,b.radius*9.5)):1}
 function setFollow(index){followPlanet=followPlanet===index?-1:index;zoom=followPlanet>=0?followFitZoom():1;rows($('#search').value)}
@@ -192,7 +211,7 @@ function init(){
     error.code='SHADER_FAILED';throw error;
   };
   renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);
-  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onStart:()=>{drag=null;pointInfluence.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
+  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onCollapse:prepareJets,onStart:()=>{drag=null;pointInfluence.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
   renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
