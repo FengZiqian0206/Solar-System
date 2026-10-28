@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-14';
+import { createRoaming } from './roaming.js?v=grid-roam-15';
 import { createPointInfluence } from './point-influence.js?v=6';
 
 const PLANETS = [
@@ -84,7 +84,7 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail,aPlayerTint; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint;
+attribute float aSeed,aDetail,aPlayerTint; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
@@ -103,12 +103,32 @@ void main(){
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
  vec3 renderedPosition=position+uRoam*(1.-vPlayer)*aPlayerOffset;
+ float collapseSize=1.;vCollapseFade=1.;
  if(uCollapse>0.){
    vec3 delta=renderedPosition-uInfluenceCenter;
-   float angle=uCollapse*uCollapse*(10.+16.*(1.-clamp(length(delta)/(uHalf*3.5),0.,1.)));
-   float cs=cos(angle),sn=sin(angle);
-   delta=vec3(cs*delta.x-sn*delta.z,delta.y*mix(1.,.22,smoothstep(0.,.8,uCollapse)),sn*delta.x+cs*delta.z);
-   renderedPosition=uInfluenceCenter+delta*pow(1.-uCollapse,1.6);
+   float initialRadius=length(delta),coreRadius=2.1*(2.*uHalf/49.);
+   if(initialRadius<=coreRadius){
+     // The original coloured core fades slowly; arriving particles are swallowed separately.
+     vCollapseFade=1.-smoothstep(0.,1.,uCollapse);
+     collapseSize=mix(1.,.65,uCollapse);
+   }else{
+     float maxRadius=length(vec3(uHalf)+abs(uInfluenceCenter))+1.8*(2.*uHalf/49.);
+     float sweepRadius=maxRadius*(24./22.);
+     float freeRadius=sqrt(max(0.,initialRadius*initialRadius-pow(sweepRadius*uCollapse,2.)));
+     float entryProgress=sqrt(initialRadius*initialRadius-coreRadius*coreRadius)/sweepRadius;
+     float insideTime=max(0.,(uCollapse-entryProgress)*24.);
+     float currentRadius=insideTime>0.?coreRadius*exp(-2.5*insideTime):freeRadius;
+     float contraction=clamp(1.-currentRadius/initialRadius,0.,1.);
+     float angle=uCollapse*uCollapse*(90.+250.*(1.-clamp(initialRadius/maxRadius,0.,1.)))+48.*contraction;
+     float cs=cos(angle),sn=sin(angle);
+     vec3 direction=delta/initialRadius;
+     direction.y*=mix(1.,.12,smoothstep(0.,.9,contraction));
+     direction=normalize(direction);
+     direction=vec3(cs*direction.x-sn*direction.z,direction.y,sn*direction.x+cs*direction.z);
+     renderedPosition=uInfluenceCenter+direction*currentRadius;
+     vCollapseFade=1.-smoothstep(0.,1.2,insideTime);
+     collapseSize=mix(1.,.35,smoothstep(0.,1.2,insideTime));
+   }
  }
  vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(renderedPosition,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.47);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.12;radius*=mix(1.55,1.00,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.55,1.32,visualDense)*(1.+uBeltBoost*(-.12+aSeed*.12));float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
  // Keep overview's perspective/zoom sizing; only bound extreme close-up sizes.
@@ -119,14 +139,14 @@ void main(){
  float clusterProfile=1.-smoothstep(0.,2.1,clusterDistance);
  float clusterBlend=uRoam*smoothstep(0.,.02,aPlayerTint)*(1.-smoothstep(2.02,2.1,clusterDistance));
  gl_PointSize=mix(gl_PointSize,(4.+14.*clusterProfile)*uPixelRatio,clusterBlend);
- gl_PointSize*=max(.12,pow(1.-uCollapse,.65));
+ gl_PointSize*=collapseSize;
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
 }`;
 const fragmentShader=`
-precision highp float;uniform float uTime,uCollapse;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint;
+precision highp float;uniform float uTime;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
 vec3 palette(float t){vec3 c[11];c[0]=vec3(.192,.212,.584);c[1]=vec3(.271,.459,.706);c[2]=vec3(.455,.678,.82);c[3]=vec3(.671,.851,.914);c[4]=vec3(.878,.953,.973);c[5]=vec3(1.,1.,.749);c[6]=vec3(.996,.878,.565);c[7]=vec3(.992,.682,.38);c[8]=vec3(.957,.427,.263);c[9]=vec3(.843,.188,.153);c[10]=vec3(.647,0.,.149);int i=int(min(10.,floor(t*11.)));if(i==0)return c[0];if(i==1)return c[1];if(i==2)return c[2];if(i==3)return c[3];if(i==4)return c[4];if(i==5)return c[5];if(i==6)return c[6];if(i==7)return c[7];if(i==8)return c[8];if(i==9)return c[9];return c[10];}
-void main(){if(vVisible<.5)discard;float collapseFade=pow(1.-smoothstep(.05,1.,uCollapse),2.);if(collapseFade<=0.)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);vec3 playerColor=.55+.45*cos(6.28318*(uTime/4.+vec3(0.,.333,.667)));if(vPlayer>.5){gl_FragColor=vec4(playerColor,.7*edge*collapseFade);return;}float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;alpha=min(1.,alpha*(1.+vEmphasis*.48));alpha*=1.-vShadow*.99;if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);alpha=max(alpha,.55*vPlayerTint*edge);gl_FragColor=vec4(mix(palette(vRatio),playerColor,vPlayerTint),alpha*collapseFade);}`;
+void main(){if(vVisible<.5)discard;float collapseFade=vCollapseFade;if(collapseFade<=0.)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);vec3 playerColor=.55+.45*cos(6.28318*(uTime/4.+vec3(0.,.333,.667)));if(vPlayer>.5){gl_FragColor=vec4(playerColor,.7*edge*collapseFade);return;}float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;alpha=min(1.,alpha*(1.+vEmphasis*.48));alpha*=1.-vShadow*.99;if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);alpha=max(alpha,.55*vPlayerTint*edge);gl_FragColor=vec4(mix(palette(vRatio),playerColor,vPlayerTint),alpha*collapseFade);}`;
 
 function rebuild(){
   if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
