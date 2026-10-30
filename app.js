@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-20';
+import { createRoaming } from './roaming.js?v=grid-roam-22';
 import { createPointInfluence } from './point-influence.js?v=7';
 import { createCenterTrail } from './center-trail.js?v=1';
 
@@ -85,7 +85,7 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail,aPlayerTint,aJetDelay; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uGridStep,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse,uExpansion; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
+attribute float aSeed,aDetail,aPlayerTint,aJetDelay; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uGridStep,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse,uExpansion,uGrowth; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
@@ -146,6 +146,8 @@ void main(){
      collapseSize=mix(1.,.35,smoothstep(0.,1.2,insideTime));
    }
  }
+ float growth=smoothstep(0.,1.,uGrowth);
+ if(uGrowth<1.){renderedPosition=mix(uInfluenceCenter,renderedPosition,growth);vCollapseFade*=smoothstep(0.,.3,uGrowth);}
  vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(renderedPosition,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.47);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.12;radius*=mix(1.55,1.00,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.55,1.32,visualDense)*(1.+uBeltBoost*(-.12+aSeed*.12));float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
  // Keep overview's perspective/zoom sizing; only bound extreme close-up sizes.
  if(uRoam>.5){float roamScale=ratio<=.281?uSpaceScale:1.;gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio*roamScale,(bodyDepth>0.?48.:14.)*uPixelRatio*roamScale);}
@@ -155,7 +157,7 @@ void main(){
  float clusterProfile=1.-smoothstep(0.,2.1,clusterDistance);
  float clusterBlend=uRoam*smoothstep(0.,.02,aPlayerTint)*(1.-smoothstep(2.02,2.1,clusterDistance));
  gl_PointSize=mix(gl_PointSize,(4.+14.*clusterProfile)*uPixelRatio,clusterBlend);
- gl_PointSize*=collapseSize;
+ gl_PointSize*=collapseSize*max(.05,growth);
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
  vVisible=1.;if(uDenseMode>.5&&uRoam<.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
 }`;
@@ -183,6 +185,7 @@ function rebuild(){
   material.uniforms.uRoam={value:0};
   material.uniforms.uCollapse={value:0};
   material.uniforms.uExpansion={value:0};
+  material.uniforms.uGrowth={value:1};
   material.uniforms.uGridStep={value:step};
   material.uniforms.uPlayer={value:new THREE.Vector3()};
   material.uniforms.uInfluenceCenter={value:new THREE.Vector3()};
@@ -213,6 +216,10 @@ function prepareJets(){
   cells.forEach((cell,rank)=>{delays.array[cell.index]=rank*spacing;});
   delays.needsUpdate=true;
 }
+function resetCycleScene(){
+  simDays=0;updateBodies();pointInfluence.reset();centerTrail.reset();
+  geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;
+}
 function updateBodies(){const next=bodyData();bodies.length=0;bodies.push(...next);next.forEach((b,i)=>{material.uniforms.uBodies.value[i].set(b.pos.x,b.pos.y,b.pos.z,b.radius);material.uniforms.uLevels.value[i].set(b.core,b.edge);if(i>0)material.uniforms.uShadowDirs.value[i].copy(b.pos).sub(next[0].pos).normalize()});material.uniforms.uSaturn.value.copy(next[6].pos);updateBodyDetails()}
 function followFitZoom(){const b=bodies[followPlanet+1];return b?Math.min(22,78/Math.max(1.25,b.radius*9.5)):1}
 function setFollow(index){followPlanet=followPlanet===index?-1:index;zoom=followPlanet>=0?followFitZoom():1;rows($('#search').value)}
@@ -224,7 +231,7 @@ function init(){
   };
   renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);
   centerTrail=createCenterTrail(THREE);scene.add(centerTrail.object);
-  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onCollapse:prepareJets,onStart:()=>{drag=null;pointInfluence.reset();centerTrail.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
+  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onCollapse:prepareJets,onRegrow:resetCycleScene,onStart:()=>{drag=null;pointInfluence.reset();centerTrail.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
   renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
@@ -238,6 +245,7 @@ function frame(now){
   else {cloud.rotation.set(pitch,yaw,0);const focus=bodies[followPlanet>=0?followPlanet+1:0];focusOffset.copy(focus.pos).applyEuler(cloud.rotation).multiplyScalar(-1);cloud.position.copy(focusOffset);camera.position.set(0,0,78);camera.zoom=zoom}
   material.uniforms.uCollapse.value=roaming.active?roaming.collapseProgress:0;
   material.uniforms.uExpansion.value=roaming.active?roaming.expansion:0;
+  material.uniforms.uGrowth.value=roaming.active?roaming.growth:1;
   if(detailCloud)detailCloud.visible=!roaming.active;
   centerTrail.update(roaming.influencePosition,dt,{active:roaming.active,time:now/1000,freeze:roaming.collapsing,fade:1-THREE.MathUtils.smoothstep(roaming.collapseProgress,0,.35)});
   // The original lattice bounds no longer describe the rotating cloud during collapse.
