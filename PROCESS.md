@@ -1,3 +1,79 @@
+Design Overview
+
+I extended my original solar system visualisation with more interactions and playful features. (I wanted to make one project richer and more interesting instead of creating several small and unrelated exercises. This was also my original plan at the beginning of the course.)
+
+1. I updated the cursor UI. Players can double-click to enter full-screen game mode.
+
+2. In full-screen mode, players can control a strange planet from a third-person view using the "WASD" keys.
+
+3. The strange planet constantly changes colour and has a repulsion field and a trail around it. The repulsion field pushes nearby point clouds away, while its colours and trail can temporarily change the colours of other planets.
+
+4. Pressing the "Space" key triggers a random event. The strange planet may turn into a black hole or activate other special effects. These events can cause major changes to the virtual solar system.
+
+5. All controls are also shown on screen, so mobile users can understand and use them too.
+
+Interaction Design and Player Experience
+
+I wanted to create an interactive experience where players can move freely through a point-cloud solar system.
+
+The main loop is:
+
+Move around → Discover the repulsion effect → Observe the movement trail → See how your actions affect other planets → Trigger a random event at any time → Change the solar system → Restore it and start again.
+
+The main idea is to let players explore, experiment and see how their actions can change the whole solar system.
+
+User Feedback and Testing
+
+Tester A:
+
+The instruction about double-clicking was difficult to notice at first. The actual gameplay only started after entering full-screen mode.
+
+My change: I changed the first-time experience so that players enter full-screen mode directly, with clear on-screen instructions. Players can still exit full-screen mode whenever they want.
+
+Tester B:
+
+1. The experience sometimes crashed when opening. I also experienced this during testing, but it happened very rarely. (I have not found the exact cause yet.)
+2. The tester suggested adding the A, S and D keys instead of only using W, to make movement smoother. He also suggested using Q and E for vertical movement.
+
+My change: I added A, S and D, but decided not to add Q and E. I wanted to avoid having too many controls, and I think the WASD controls are easier to understand.
+
+AI Use (From September 27)
+
+From September 27 onwards, I continued developing the project with a focus on turning the original solar system visualisation into a more interactive experience. As of October 31, 2026, the main branch has submitted 112 times in total.
+
+Tools: I used Codex to help with the implementation and debugging of the interactive features. Three.js, WebGL and GLSL were used for the point clouds, planet movement, repulsion effects, trails and random events. HTML, CSS and SVG were used for the UI and on-screen controls. Git and GitHub Pages were used to manage versions and publish the project.
+
+What I kept: I kept the original solar system and its point-cloud visual style as the base. Instead of creating a completely separate game, I built the new interactions on top of the existing project. This helped keep the whole experience connected.
+
+What I changed or rejected: I changed the original double-click entry after user testing showed that it was easy to miss. I also considered adding more controls, such as Q and E, but decided to keep the controls simple. I wanted the experience to be easy to understand rather than adding more features just for the sake of it.
+
+My contribution:I made the main design decisions, including the visual direction, planet proportions, point sizes, transparency, density, planet details, interaction methods and UI layout. I also decided how the different effects should look and how players should interact with them. Codex helped with the coding, but I was responsible for the overall design direction and final decisions.
+
+
+Assignment 2（Previous content）：
+
+The project lasted from September 10 to September 26, about 8 active development days, and currently produced about 75 git submissions.
+
+Use tools: use Codex to realize three.js/webgl/glsl to realize point cloud; Html/css/svg to achieve UI and charts; Git/github pages manage version and release;
+
+Reserved content: always use the initial planets planetary data as the data source for tables, orbits and charts.
+
+Discard content:
+
+1.the first five separate indicator charts. They occupy space and are difficult, so they are finally merged into a five axis planetary parameter spectrum.
+
+2.The early echarts desktop solution has also been replaced by the three.js web page solution for sharing through GitHub pages. Repeatedly modify the size relationship of planets to beautify the visual effect.
+
+3.Repeatedly modify the details of planetary point clouds, especially Saturn rings, to present a good-looking effect.
+
+My work content: develop visual direction, scale, point size, transparency, density, planetary details, interaction mode and UI specification.
+
+Codex's contribution: complete the main code, shaders, Kepler tracks, follow the perspective, charts, compatibility fixes, testing, GIT submission and release.
+
+Cooperation mode: I am responsible for setting goals, aesthetic judgment and acceptance; AI is responsible for implementation, troubleshooting and iteration, and entering the details of parameter modification.
+
+The following contents are Chinese records, please ignore.
+
 设计概述
 
 我基于太阳系的信息可视化做了一些交互设计和趣味玩法的延伸（我想把一个内容做的更丰富和有趣而不单单只是零散的小作业，这也是我在这个课程一开始的计划）：
@@ -22,33 +98,7 @@
 
 体验者B：1.进入时偶尔会产生崩溃，我测试后也遇到过但很少（未发现原因）2.可以加入ASD键不只是W键可以操作更顺滑，并且可以加入QE键来实现上下运动。我只增加了ASD键没有增加QE键，因为我不想再增加过度按键而且WASD键来操控更容易理解
 
-AI使用说明：
-
-
-
-
 Assignment 2（Previous content）：
-
-The project lasted from September 10 to September 26, about 8 active development days, and currently produced about 75 git submissions.
-
-- Use tools: use Codex to realize three.js/webgl/glsl to realize point cloud; Html/css/svg to achieve UI and charts; Git/github pages manage version and release;
-
-- Reserved content: always use the initial planets planetary data as the data source for tables, orbits and charts.
-
-- Discard content:
-
-- 1.the first five separate indicator charts. They occupy space and are difficult, so they are finally merged into a five axis planetary parameter spectrum.
-
-- 2.The early echarts desktop solution has also been replaced by the three.js web page solution for sharing through GitHub pages. Repeatedly modify the size relationship of planets to beautify the visual effect.
-
-- 3.Repeatedly modify the details of planetary point clouds, especially Saturn rings, to present a good-looking effect.
-
-- My work content: develop visual direction, scale, point size, transparency, density, planetary details, interaction mode and UI specification.
-
-- Codex's contribution: complete the main code, shaders, Kepler tracks, follow the perspective, charts, compatibility fixes, testing, GIT submission and release.
-
-- Cooperation mode: I am responsible for setting goals, aesthetic judgment and acceptance; AI is responsible for implementation, troubleshooting and iteration, and entering the details of parameter modification.
-
 
 项目从 9 月 10 日持续到 9 月 26 日，约 8 个活跃开发日，目前共产生大约 75 次 Git 提交。
 
