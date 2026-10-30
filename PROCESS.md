@@ -1,4 +1,4 @@
-Design Overview
+- Design Overview
 
 I extended my original solar system visualisation with more interactions and playful features. (I wanted to make one project richer and more interesting instead of creating several small and unrelated exercises. This was also my original plan at the beginning of the course.)
 
@@ -12,21 +12,21 @@ I extended my original solar system visualisation with more interactions and pla
 
 5. All controls are also shown on screen, so mobile users can understand and use them too.
 
-Interaction Design and Player Experience
+- Interaction Design and Player Experience
 
 I wanted to create an interactive experience where players can move freely through a point-cloud solar system.
 
-The main loop is:
+- The main loop :
 
 Move around → Discover the repulsion effect → Observe the movement trail → See how your actions affect other planets → Trigger a random event at any time → Change the solar system → Restore it and start again.
 
 The main idea is to let players explore, experiment and see how their actions can change the whole solar system.
 
-User Feedback and Testing
+- User Feedback and Testing
 
 Tester A:
 
-The instruction about double-clicking was difficult to notice at first. The actual gameplay only started after entering full-screen mode.
+1. The instruction about double-clicking was difficult to notice at first. The actual gameplay only started after entering full-screen mode.
 
 My change: I changed the first-time experience so that players enter full-screen mode directly, with clear on-screen instructions. Players can still exit full-screen mode whenever they want.
 
@@ -37,7 +37,7 @@ Tester B:
 
 My change: I added A, S and D, but decided not to add Q and E. I wanted to avoid having too many controls, and I think the WASD controls are easier to understand.
 
-AI Use (From September 27)
+- AI Use (From September 27)
 
 From September 27 onwards, I continued developing the project with a focus on turning the original solar system visualisation into a more interactive experience. As of October 31, 2026, the main branch has submitted 112 times in total.
 
