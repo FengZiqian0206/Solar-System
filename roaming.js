@@ -1,6 +1,7 @@
 // One optional camera mode; the overview's orbit, zoom and follow state stay untouched.
 export function createRoaming({ THREE, camera, viewport, getEarth, half, step, onStart, onCollapse, onRegrow }) {
-  const expansionDuration=.9,collapseEnd=expansionDuration+24,growthStart=collapseEnd+1,cycleEnd=growthStart+3;
+  // Join the original vortex after one third of the initial pulse's return displacement.
+  const expansionDuration=.9,vortexStart=expansionDuration*(1-Math.asin(Math.sqrt(2/3))/Math.PI),collapseEnd=vortexStart+24,growthStart=collapseEnd+1,cycleEnd=growthStart+3;
   const hologram = document.querySelector('#hologram');
   const cursor = document.createElement('div');
   cursor.id = 'rainbowCursor';
@@ -236,7 +237,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     enter,
     get active() { return active; },
     get collapsing() { return collapseElapsed>=0; },
-    get collapseProgress() { return collapseElapsed<0||collapseElapsed>=growthStart?0:collapseElapsed>=collapseEnd?1:Math.max(0,(collapseElapsed-expansionDuration)/24); },
+    get collapseProgress() { return collapseElapsed<0||collapseElapsed>=growthStart?0:collapseElapsed>=collapseEnd?1:Math.max(0,(collapseElapsed-vortexStart)/24); },
     get expansion() { return collapseElapsed<0||collapseElapsed>=expansionDuration?0:Math.sin(Math.PI*collapseElapsed/expansionDuration)**2; },
     get growth() { return collapseElapsed<growthStart?1:Math.min(1,(collapseElapsed-growthStart)/3); },
     setGrid(nextStep) { if(!active)step=nextStep; },
