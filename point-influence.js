@@ -1,7 +1,7 @@
 // Only nearby and still-fading cells are updated; base grid coordinates stay intact.
-export function createPointInfluence(size, half) {
+export function createPointInfluence(size, half, gridStep = 2 * half / (size - 1)) {
   const values = new Float32Array(size ** 3), offsets = new Float32Array(size ** 3 * 3), active = new Set(), targets = new Map();
-  const step = 2 * half / (size - 1), radius = 2.1, repelRadius = 5.5;
+  const step = gridStep, radius = 2.1, repelRadius = 5.5;
   return {
     values, offsets,
     reset() { values.fill(0); offsets.fill(0); active.clear(); targets.clear(); },
@@ -22,7 +22,7 @@ export function createPointInfluence(size, half) {
       let changed=false;
       for(const index of active) {
         const target=targets.get(index)||0, previous=values[index];
-        const tau=target>previous?.22:6;
+        const tau=target>previous?.22:9;
         const next=previous+(target-previous)*(1-Math.exp(-Math.max(0,dt)/tau));
         values[index]=next<.001&&target===0?0:next;
         // A separate, shorter-lived offset lets nearby points return without shortening the colour trail.

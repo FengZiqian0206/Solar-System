@@ -97,6 +97,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   function leave() {
     if (!active) return;
     active = false; locked = false; nativeFullscreen = false; stopMovement();resetCollapse(); pointer = null; lookPointer = null;touchStart=null;lastTap=null;
+    document.querySelector('#density')?.removeAttribute('disabled');
     hud.hidden = true;
     document.body.classList.remove('is-roaming', 'has-rainbow-cursor');
     hologram.classList.remove('is-roaming');
@@ -106,7 +107,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if (document.fullscreenElement === hologram) document.exitFullscreen().catch(() => {});
   }
   function dismissCompleted(event) {
-    if(!active || collapseElapsed<24)return;
+    if(!active || collapseElapsed<24.6)return;
     event.preventDefault();event.stopImmediatePropagation();
     reenterAfter=performance.now()+500;
     leave();
@@ -120,6 +121,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       if (!nativeFullscreen && !touchMode && !automatic) return;
       onStart();
       active = true; enteredOnce = true;pointer = null; yaw = Math.PI / 4; pitch = .24;
+      document.querySelector('#density')?.setAttribute('disabled','');
       distance = 48; stopMovement();resetCollapse(); lookPointer = null;
       travel.copy(getEarth().pos); snapToGrid(); travel.copy(position);
       hud.hidden = false;
@@ -210,7 +212,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if(active && event.code==='Space' && !event.ctrlKey && !event.metaKey && !event.altKey){
       event.preventDefault();
       if(!event.repeat){
-        if(collapseElapsed>=24)dismissCompleted(event);
+        if(collapseElapsed>=24.6)dismissCompleted(event);
         else if(collapseElapsed<0){requestImmersive(true);startCollapse();}
       }
     }
@@ -241,7 +243,9 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     enter,
     get active() { return active; },
     get collapsing() { return collapseElapsed>=0; },
-    get collapseProgress() { return collapseElapsed<0?0:Math.min(1,collapseElapsed/24); },
+    get collapseProgress() { return collapseElapsed<0?0:Math.max(0,Math.min(1,(collapseElapsed-.6)/24)); },
+    get expansion() { return collapseElapsed<0||collapseElapsed>=.6?0:Math.sin(Math.PI*collapseElapsed/.6)**2; },
+    setGrid(nextStep) { if(!active)step=nextStep; },
     get zoom() { return 78 / distance; },
     position,
     influencePosition: travel,
@@ -249,7 +253,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       distance = Math.max(6, Math.min(90, distance * (delta < 0 ? .9 : 1.1)));
     },
     update(dt, elapsed=dt) {
-      if(collapseElapsed>=0)collapseElapsed=Math.min(24,collapseElapsed+Math.max(0,elapsed));
+      if(collapseElapsed>=0)collapseElapsed=Math.min(24.6,collapseElapsed+Math.max(0,elapsed));
       // If lock is refused, edge turning still permits continuous orbit without dragging.
       if(document.pointerLockElement!==viewport && pointer) {
         const edgeX=Math.max(0,(pointer.x-innerWidth+24)/24)-Math.max(0,(24-pointer.x)/24);
