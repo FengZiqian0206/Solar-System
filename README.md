@@ -2,6 +2,21 @@
 
 Direct access to run: https://fengziqian0206.github.io/Solar-System/
 
+<img width="1280" height="900" alt="main2" src="https://github.com/user-attachments/assets/90059f90-e774-4e0c-bf62-cbe7ee7ab203" />
+
+<img width="3440" height="1440" alt="11" src="https://github.com/user-attachments/assets/dfbc8da3-0a4d-4bc8-a0ce-aa63f9e3e6e0" />
+
+<img width="3440" height="1440" alt="22" src="https://github.com/user-attachments/assets/3ca306aa-d954-4245-afa4-86b7cfcfc536" />
+
+<img width="3440" height="1440" alt="33" src="https://github.com/user-attachments/assets/95ea7067-2457-40ea-bcff-ada88f7d0438" />
+
+<img width="3440" height="1440" alt="44" src="https://github.com/user-attachments/assets/ec764d4c-1af0-4d66-97ea-edb899be5352" />
+
+<img width="3440" height="1440" alt="55" src="https://github.com/user-attachments/assets/ce7bf4cd-fc2a-4ea6-8d69-29d4eb50df17" />
+
+
+
+
 <img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
 
 This is the motion simulation of the eight planets in the solar system : Based on the real revolution period, eccentricity and Kepler equation of the eight planets.
