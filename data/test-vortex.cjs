@@ -9,7 +9,7 @@ const {chromium}=require('playwright');
   const browser=await chromium.launch({channel:'msedge',headless:true,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
   const output=fs.mkdtempSync(path.join(os.tmpdir(),'solar-vortex-'));
   const url=process.argv[2]||'http://127.0.0.1:4194/';
-  const report={desktop:null,mobile:[],completionExits:[],screenshots:output};
+  const report={desktop:null,mobile:[],cycles:[],screenshots:output};
   async function open(profile){
     const context=await browser.newContext({viewport:{width:profile.width,height:profile.height},isMobile:!!profile.mobile,hasTouch:!!profile.mobile,deviceScaleFactor:1});
     const page=await context.newPage(),errors=[],failed=[];
@@ -20,14 +20,14 @@ const {chromium}=require('playwright');
       document.addEventListener('DOMContentLoaded',async()=>{
         const {THREE}=await import(new URL('./renderer-support.js?v=visual-balance-1',location.href).href);
         const afterRender=THREE.Points.prototype.onAfterRender;
-        window.qaVortexHistory=[];window.qaExpansionFrames=[];window.qaFrozen=null;
+        window.qaVortexHistory=[];window.qaExpansionFrames=[];window.qaGrowthFrames=[];window.qaFrozen=null;
         document.addEventListener('keydown',event=>{if(event.code==='Space'&&!event.repeat&&window.qaVortex?.active&&window.qaVortex.progress===0)window.qaTriggerWall=performance.now();},true);
         THREE.Points.prototype.onAfterRender=function(renderer,scene,camera,...args){
           afterRender.call(this,renderer,scene,camera,...args);
-          if(!this.material?.uniforms?.uCollapse||this.geometry.attributes.position.count!==125000)return;
+          if(this.userData.qaProbe||!this.material?.uniforms?.uCollapse||this.geometry.attributes.position.count!==125000)return;
           const u=this.material.uniforms;
           window.qaCloud=this;window.qaRenderer=renderer;window.qaScene=scene;window.qaCamera=camera;
-          window.qaVortex={active:u.uRoam.value,progress:u.uCollapse.value,expansion:u.uExpansion.value,time:u.uTime.value,wall:performance.now(),travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),bodies:u.uBodies.value.flatMap(body=>body.toArray()),calls:renderer.info.render.calls,points:renderer.info.render.points,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,dpr:renderer.getPixelRatio()};
+          window.qaVortex={active:u.uRoam.value,progress:u.uCollapse.value,growth:u.uGrowth.value,expansion:u.uExpansion.value,time:u.uTime.value,wall:performance.now(),travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),bodies:u.uBodies.value.flatMap(body=>body.toArray()),calls:renderer.info.render.calls,points:renderer.info.render.points,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,dpr:renderer.getPixelRatio()};
           if(u.uRoam.value&&u.uExpansion.value>0)window.qaExpansionFrames.push({expansion:u.uExpansion.value,progress:u.uCollapse.value});
           if(u.uRoam.value&&u.uCollapse.value>0){
             if(!window.qaFrozen){
@@ -42,6 +42,18 @@ const {chromium}=require('playwright');
             }
             window.qaVortexHistory.push({progress:u.uCollapse.value,wall:performance.now()});
           }
+          if(u.uRoam.value&&u.uCollapse.value===1&&!window.qaBlackSnapshot){
+            const a=this.geometry.attributes,saved=window.qaFrozen;
+            window.qaBlackSnapshot={state:{...window.qaVortex},material:this.material.clone(),geometry:this.geometry,camera:camera.clone(),history:window.qaVortexHistory.slice(),elapsed:(performance.now()-window.qaTriggerWall)/1000,baseIntact:window.qaBasePositions?.every((value,index)=>value===a.position.array[index]),frozenTint:saved.tint.every((value,index)=>value===a.aPlayerTint.array[index]),frozenOffsets:saved.offset.every((value,index)=>value===a.aPlayerOffset.array[index]),frozenJetDelay:saved.jetDelay.every((value,index)=>value===a.aJetDelay.array[index]),frozenBodies:saved.bodies.every((value,index)=>value===window.qaVortex.bodies[index])};
+          }
+          if(u.uRoam.value&&u.uGrowth.value<1){
+            window.qaGrowthFrames.push({growth:u.uGrowth.value,progress:u.uCollapse.value,wall:performance.now()});
+            if(u.uGrowth.value===0&&!window.qaRegrowReset){
+              const a=this.geometry.attributes,trail=scene.getObjectByName('centerTrail');
+              window.qaRegrowReset={tintZero:a.aPlayerTint.array.every(value=>value===0),offsetZero:a.aPlayerOffset.array.every(value=>value===0),trailCleared:!trail.visible&&trail.geometry.drawRange.count===0,geometrySame:this.geometry===window.qaBlackSnapshot.geometry,bodies:window.qaVortex.bodies.slice()};
+            }
+          }
+          if(window.qaBlackSnapshot&&u.uRoam.value&&u.uGrowth.value===1&&u.uCollapse.value===0&&!document.querySelector('#roamCollapse').disabled&&!window.qaCycleReady)window.qaCycleReady={...window.qaVortex};
           if(u.uRoam.value&&!window.qaVortexReady){window.qaVortexReady=true;console.log('QA_VORTEX_READY');}
         };
       });
@@ -50,21 +62,23 @@ const {chromium}=require('playwright');
     await page.goto(url);await ready;
     return {context,page,errors,failed};
   }
-  async function scenePixels(page){
-    return page.evaluate(async()=>{
+  async function scenePixels(page,black=false){
+    return page.evaluate(async black=>{
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
       const renderer=window.qaRenderer,target=new THREE.WebGLRenderTarget(128,96),previous=renderer.getRenderTarget();
+      const scene=black?new THREE.Scene():window.qaScene,camera=black?window.qaBlackSnapshot.camera:window.qaCamera;
+      if(black){const point=new THREE.Points(window.qaBlackSnapshot.geometry,window.qaBlackSnapshot.material);point.userData.qaProbe=true;point.frustumCulled=false;scene.add(point);}
       try{
-        renderer.setRenderTarget(target);renderer.render(window.qaScene,window.qaCamera);
+        renderer.setRenderTarget(target);renderer.render(scene,camera);
         const pixels=new Uint8Array(128*96*4);renderer.readRenderTargetPixels(target,0,0,128,96,pixels);
         let lit=0,maxRGB=0;
         for(let i=0;i<pixels.length;i+=4){const value=Math.max(pixels[i],pixels[i+1],pixels[i+2]);maxRGB=Math.max(maxRGB,value);if(value>1)lit++;}
         return {lit,maxRGB};
-      }finally{renderer.setRenderTarget(previous);target.dispose();}
-    });
+      }finally{renderer.setRenderTarget(previous);target.dispose();if(black)window.qaBlackSnapshot.material.dispose();}
+    },black);
   }
   async function resetChecks(page){
-    await page.waitForFunction(()=>window.qaVortex?.active&&window.qaVortex.progress===0);
+    await page.waitForFunction(()=>window.qaVortex?.active&&window.qaVortex.progress===0&&window.qaVortex.growth===1&&!document.querySelector('#roamCollapse').disabled);
     assert.equal(await page.locator('#roamForward').isDisabled(),false);
     assert.equal(await page.locator('#roamCollapse').isDisabled(),false);
     assert.equal(await page.locator('#roamCollapse').getAttribute('aria-pressed'),'false');
@@ -74,7 +88,7 @@ const {chromium}=require('playwright');
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
       const renderer=window.qaRenderer,material=window.qaCloud.material.clone();
       material.blending=THREE.NoBlending;material.defaultAttributeValues.aDetail=[0];material.defaultAttributeValues.aPlayerOffset=[0,0,0];
-      material.uniforms.uTime.value=0;material.uniforms.uRoam.value=1;material.uniforms.uExpansion.value=0;material.uniforms.uInfluenceCenter.value.set(0,12,0);material.uniforms.uPlayer.value.set(0,12,0);
+      material.uniforms.uTime.value=0;material.uniforms.uRoam.value=1;material.uniforms.uExpansion.value=0;material.uniforms.uGrowth.value=1;material.uniforms.uInfluenceCenter.value.set(0,12,0);material.uniforms.uPlayer.value.set(0,12,0);
       const geometry=new THREE.BufferGeometry();
       geometry.setAttribute('position',new THREE.Float32BufferAttribute([16,12,0],3));
       geometry.setAttribute('aSeed',new THREE.Float32BufferAttribute([.5],1));
@@ -83,8 +97,8 @@ const {chromium}=require('playwright');
       const scene=new THREE.Scene(),point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
       const camera=new THREE.OrthographicCamera(-64,64,64,-64,.1,400),target=new THREE.WebGLRenderTarget(512,512),pixels=new Uint8Array(512*512*4);
       const previous=renderer.getRenderTarget(),clear=renderer.getClearColor(new THREE.Color()),clearAlpha=renderer.getClearAlpha();
-      function sample(radius,progress,top=false,delay=0,expansion=0){
-        material.uniforms.uCollapse.value=progress;material.uniforms.uExpansion.value=expansion;
+      function sample(radius,progress,top=false,delay=0,expansion=0,growth=1){
+        material.uniforms.uCollapse.value=progress;material.uniforms.uExpansion.value=expansion;material.uniforms.uGrowth.value=growth;
         geometry.attributes.aJetDelay.setX(0,delay);geometry.attributes.aJetDelay.needsUpdate=true;
         const delta=Array.isArray(radius)?radius:[radius,0,0];
         geometry.attributes.position.setXYZ(0,delta[0],12+delta[1],delta[2]);geometry.attributes.position.needsUpdate=true;
@@ -97,8 +111,8 @@ const {chromium}=require('playwright');
         }
         return {weight,maxAlpha,x:weight?(x/weight+.5-256)/4:null,y:weight?(y/weight+.5-256)/4:null};
       }
-      function probe(radius,progress,delay=0,expansion=0){
-        const front=sample(radius,progress,false,delay,expansion),top=sample(radius,progress,true,delay,expansion);
+      function probe(radius,progress,delay=0,expansion=0,growth=1){
+        const front=sample(radius,progress,false,delay,expansion,growth),top=sample(radius,progress,true,delay,expansion,growth);
         const position=front.weight&&top.weight?[front.x,front.y,-top.y]:null;
         return {progress,front,top,position,radius:position?Math.hypot(...position):null};
       }
@@ -113,13 +127,16 @@ const {chromium}=require('playwright');
         const preparation=.25/24,jetTimes=[0,.00001,.3/24+preparation,.9/24+preparation,2.5/24+preparation,3.1/24+preparation,4/24+preparation];
         const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
         const pulseAt=steps=>{const source=[steps*material.uniforms.uGridStep.value,0,0];return {base:probe(source,0),peak:probe(source,0,0,1),reset:probe(source,0)};};
-        return {expansion:{core:pulseAt(1),ring:pulseAt(4),far:pulseAt(14),center:probe(0,0,0,1)},coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
+        // Magnify only these isolated probes so their early growth is not lost to subpixel aliasing.
+        const pixelRatio=material.uniforms.uPixelRatio.value;material.uniforms.uPixelRatio.value=pixelRatio*8;
+        const growth=[0,.2,.5,1].map(value=>({growth:value,...probe([16,4,8],0,0,0,value)}));
+        material.uniforms.uPixelRatio.value=pixelRatio;
+        return {growth,expansion:{core:pulseAt(1),ring:pulseAt(4),far:pulseAt(14),center:probe(0,0,0,1)},coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
   }
-  async function completionExitCase(mode){
-    // Exercise the real controller with its public clock; no GPU, app loop or production debug hooks.
-    const mobile=mode==='mobile-hud-tap';
+  async function cycleCase(mobile){
+    // Exercise boundary clocks without a second real-time GPU cycle or production debug hooks.
     const context=await browser.newContext({viewport:{width:mobile?390:1280,height:mobile?844:900},isMobile:mobile,hasTouch:mobile});
     const page=await context.newPage(),errors=[];page.on('pageerror',error=>errors.push(error.message));
     try{
@@ -131,19 +148,20 @@ const {chromium}=require('playwright');
         viewport.requestPointerLock=()=>Promise.reject(new Error('QA component CSS mode'));
         document.querySelector('#hologram').requestFullscreen=()=>Promise.reject(new Error('QA component CSS mode'));
         window.qaComponentCamera=new THREE.PerspectiveCamera(48,1,.1,500);
-        window.qaController=createRoaming({THREE,camera:window.qaComponentCamera,viewport,getEarth:()=>({pos:new THREE.Vector3(2,0,0)}),half:26,step:52/49,onStart(){}});
+        window.qaRegrowCalls=0;
+        window.qaController=createRoaming({THREE,camera:window.qaComponentCamera,viewport,getEarth:()=>({pos:new THREE.Vector3(2,0,0)}),half:26,step:52/49,onStart(){},onRegrow(){window.qaRegrowCalls++;}});
         await window.qaController.enter({automatic:true});
         window.qaController.update(0,0);
       });
       await page.keyboard.down('Space');
       const pulse=await page.evaluate(()=>{
-        const controller=window.qaController,snapshot=()=>({expansion:controller.expansion,progress:controller.collapseProgress,camera:window.qaComponentCamera.position.toArray(),travel:controller.influencePosition.toArray()}),samples=[snapshot()];
+        const controller=window.qaController,snapshot=()=>({expansion:controller.expansion,progress:controller.collapseProgress,growth:controller.growth,camera:window.qaComponentCamera.position.toArray(),travel:controller.influencePosition.toArray()}),samples=[snapshot()];
         for(let index=0;index<4;index++){controller.update(.1,.15);samples.push(snapshot());}
         return samples;
       });
       assert.ok(pulse.every(sample=>sample.progress===0),'The short expansion precedes the unchanged vortex clock');
-      assert.ok(pulse[0].expansion===0&&pulse[4].expansion===0&&Math.abs(pulse[2].expansion-1)<1e-8,'Expansion returns to its original radius after its 0.6-second pulse');
-      assert.ok(pulse[1].expansion>0&&pulse[1].expansion<1&&Math.abs(pulse[1].expansion-pulse[3].expansion)<1e-8,'Expansion rises and settles symmetrically');
+      assert.ok(pulse[0].expansion===0&&pulse[4].expansion===0,'Expansion returns to its original radius after its 0.6-second pulse');
+      assert.ok(pulse[1].expansion<.01&&pulse[2].expansion>.1&&pulse[2].expansion<.2&&pulse[3].expansion>.9,'The local pulse starts slowly and builds toward its late peak');
       assert.ok(pulse.every(sample=>sample.camera.every((value,index)=>value===pulse[0].camera[index])&&sample.travel.every((value,index)=>value===pulse[0].travel[index])),'The local pulse changes particles without moving the camera or coloured centre');
       await page.evaluate(()=>window.qaController.update(.1,12));
       const rect=await page.locator('#viewport').boundingBox(),point={x:rect.x+rect.width*.5,y:rect.y+rect.height*.4};
@@ -152,18 +170,37 @@ const {chromium}=require('playwright');
       assert.equal(await page.evaluate(()=>window.qaController.active&&window.qaController.collapseProgress===.5),true,'Clicks and repeated Space do not dismiss an in-progress vortex');
       await page.evaluate(()=>window.qaController.update(.1,12));
       assert.equal(await page.evaluate(()=>window.qaController.collapseProgress),1);
-      if(mode==='desktop-background-doubleclick')await page.mouse.dblclick(point.x,point.y);
-      else{
-        const target=await page.locator(mobile?'#roamCollapseHint':'#roamForward').boundingBox(),x=target.x+target.width/2,y=target.y+target.height/2;
-        if(mobile)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
-      }
-      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-      assert.equal(await page.evaluate(()=>window.qaController.active),false,'A new click/tap dismisses the completed vortex');
+      const hud=await page.locator(mobile?'#roamCollapseHint':'#roamForward').boundingBox(),x=hud.x+hud.width/2,y=hud.y+hud.height/2;
+      if(mobile)await page.touchscreen.tap(x,y);else await page.mouse.click(x,y);
+      await page.keyboard.up('Space');await page.keyboard.down('Space');
+      assert.equal(await page.evaluate(()=>window.qaController.active&&window.qaController.collapseProgress===1),true,'Click, tap and a fresh Space keep the black stage immersive');
+      const black=await page.evaluate(()=>{
+        window.qaController.update(.1,.9);
+        return {progress:window.qaController.collapseProgress,growth:window.qaController.growth,regrow:window.qaRegrowCalls,camera:window.qaComponentCamera.position.toArray(),travel:window.qaController.influencePosition.toArray()};
+      });
+      assert.ok(black.progress===1&&black.growth===1&&black.regrow===0,'The completed vortex holds black for one second');
+      const growth=await page.evaluate(()=>{
+        const controller=window.qaController;
+        controller.update(.1,.2); // Crossing the boundary renders the growth origin without consuming overshoot.
+        const values=[{growth:controller.growth,progress:controller.collapseProgress,regrow:window.qaRegrowCalls}];
+        controller.update(.1,1.5);values.push({growth:controller.growth,progress:controller.collapseProgress,regrow:window.qaRegrowCalls});
+        controller.update(.1,1.5);values.push({growth:controller.growth,progress:controller.collapseProgress,regrow:window.qaRegrowCalls});
+        return {values,active:controller.active,collapsing:controller.collapsing,camera:window.qaComponentCamera.position.toArray(),travel:controller.influencePosition.toArray(),css:document.body.classList.contains('is-roaming')};
+      });
+      assert.deepEqual(growth.values,[{growth:0,progress:0,regrow:1},{growth:.5,progress:0,regrow:1},{growth:1,progress:0,regrow:1}],'A single reset callback starts a three-second regrowth');
+      assert.ok(growth.active&&growth.css&&!growth.collapsing);
+      assert.deepEqual(growth.camera,black.camera);assert.deepEqual(growth.travel,pulse[0].travel);
+      assert.equal(await page.locator('#roamForward').isDisabled(),false);assert.equal(await page.locator('#roamCollapse').isDisabled(),false);
+      await page.keyboard.down('Space');
+      assert.equal(await page.evaluate(()=>window.qaController.collapsing),false,'A Space repeat held across recovery does not launch another cycle');
+      await page.keyboard.up('Space');await page.keyboard.press('Space');
+      assert.equal(await page.evaluate(()=>window.qaController.collapsing),true,'A new Space launches the next cycle');
+      assert.equal(await page.locator('#roamCollapse').isDisabled(),true);
+      if(mobile)await page.locator('#roamExit').tap();else await page.keyboard.press('Escape');
+      assert.equal(await page.evaluate(()=>window.qaController.active),false,'Exit and Escape remain available during a repeated cycle');
       assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),false);
-      assert.equal(await page.evaluate(()=>document.fullscreenElement),null);
-      assert.equal(await page.evaluate(()=>window.qaController.collapseProgress),0,'Exit resets collapse state');
       assert.deepEqual(errors,[]);
-      return {mode,pulse,checks:['0.6-second expansion before unchanged 24-second vortex','in-progress input cannot exit','completion click/tap exits CSS fullscreen','HUD coordinates accepted','same gesture cannot re-enter']};
+      return {mobile,pulse,black,growth,checks:['accelerating 0.6-second expansion','in-progress and black-stage inputs do not exit','one-second black hold','three-second regrowth and one reset callback','camera and immersive state preserved','held Space does not restart / fresh Space repeats','Exit and Escape still work']};
     }finally{await context.close();}
   }
   try{
@@ -176,6 +213,10 @@ const {chromium}=require('playwright');
       for(const sample of [shader.expansion.core,shader.expansion.ring])assert.ok(Math.abs(sample.peak.radius/sample.base.radius-1.6)<.05,'Coloured core and nearby repulsion ring actually expand outward by sixty percent');
       for(const sample of [shader.expansion.core,shader.expansion.ring,shader.expansion.far])assert.ok(Math.hypot(...sample.reset.position.map((value,index)=>value-sample.base.position[index]))<.05,'Local expansion settles back to the original particle positions');
       assert.ok(Math.hypot(...shader.expansion.far.peak.position.map((value,index)=>value-shader.expansion.far.base.position[index]))<.05&&shader.expansion.center.radius<.15,'Far particles and the coloured centre remain fixed, rather than mimicking a global camera zoom');
+      assert.equal(shader.growth[0].front.weight,0,'Regrowth starts invisible at the old collapse centre');
+      assert.ok(shader.growth[1].front.maxAlpha>0&&shader.growth[1].front.maxAlpha<shader.growth[3].front.maxAlpha,'New-system particles fade in during early growth');
+      assert.ok(Math.hypot(...shader.growth[2].position.map((value,index)=>value-shader.growth[3].position[index]*.5))<.3,'Half growth places particles halfway from the old centre to their original positions');
+      assert.ok(Math.hypot(...shader.growth[3].position.map((value,index)=>value-[16,4,8][index]))<.2,'Full growth restores the original particle positions');
       const nearLoss=shader.near[0].radius-shader.near[1].radius,farLoss=shader.far[0].radius-shader.far[1].radius;
       assert.ok(nearLoss>farLoss*1.8&&nearLoss>farLoss+.15&&farLoss>0,`Initially farther points contract more slowly: near=${nearLoss}, far=${farLoss}`);
       assert.equal(shader.near[2].front.weight,0,'Near points have been absorbed by mid-animation');
@@ -258,28 +299,47 @@ const {chromium}=require('playwright');
       assert.deepEqual(await page.evaluate(()=>window.qaVortex.travel),started.travel,'Collapse freezes continuous movement');
       await page.waitForFunction(()=>window.qaVortex.progress>=.8);
       await page.screenshot({path:path.join(output,'desktop-3-late.png')});
-      await page.waitForFunction(()=>window.qaVortex.progress===1,null,{timeout:30000});
-      await page.screenshot({path:path.join(output,'desktop-4-complete.png')});
-      const completed=await page.evaluate(()=>({state:window.qaVortex,history:window.qaVortexHistory.slice(),elapsed:(window.qaVortexHistory.find(frame=>frame.progress===1).wall-window.qaTriggerWall)/1000,baseIntact:window.qaBasePositions.every((value,index)=>value===window.qaCloud.geometry.attributes.position.array[index]),frozenTint:window.qaFrozen.tint.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerTint.array[index]),frozenOffsets:window.qaFrozen.offset.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerOffset.array[index]),frozenJetDelay:window.qaFrozen.jetDelay.every((value,index)=>value===window.qaCloud.geometry.attributes.aJetDelay.array[index]),frozenBodies:window.qaFrozen.bodies.every((value,index)=>value===window.qaVortex.bodies[index])}));
+      await page.waitForFunction(()=>window.qaBlackSnapshot,null,{timeout:30000});
+      await page.screenshot({path:path.join(output,'desktop-4-black.png')});
+      const completed=await page.evaluate(()=>{
+        const saved=window.qaBlackSnapshot;
+        return {state:saved.state,history:saved.history,elapsed:saved.elapsed,baseIntact:saved.baseIntact,frozenTint:saved.frozenTint,frozenOffsets:saved.frozenOffsets,frozenJetDelay:saved.frozenJetDelay,frozenBodies:saved.frozenBodies};
+      });
       assert.ok(completed.history.length>10);
       assert.ok(completed.elapsed>=22.5&&completed.elapsed<=30,'Expansion plus the original vortex completes in about 24.6 real seconds');
       assert.ok(completed.history.every((frame,index,frames)=>frame.progress>=0&&frame.progress<=1&&(index===0||frame.progress>=frames[index-1].progress)),'Progress stays bounded and never restarts');
       assert.equal(completed.baseIntact,true);assert.equal(completed.frozenTint,true);assert.equal(completed.frozenOffsets,true);assert.equal(completed.frozenJetDelay,true);assert.equal(completed.frozenBodies,true);
       assert.equal(completed.state.calls,1);assert.equal(completed.state.points,125000);
       assert.equal(await page.evaluate(()=>window.qaScene.getObjectByName('centerTrail').visible),false,'The frozen centre path finishes fading before the cloud completes');
-      const completePixels=await scenePixels(page);
+      // Render the material cached on the first black frame, even if regrowth has begun meanwhile.
+      const completePixels=await scenePixels(page,true);
       const expansionFrames=await page.evaluate(()=>window.qaExpansionFrames);
       assert.ok(expansionFrames.every(frame=>frame.expansion>0&&frame.expansion<=1&&frame.progress===0),'Any rendered expansion frames precede the vortex');
       assert.equal(completePixels.lit,0,'Only the scene, excluding HTML HUD, becomes black');assert.ok(completePixels.maxRGB<=1);
       await page.keyboard.down('Space');
-      assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true,'Held Space repeat does not dismiss completion');
-      assert.equal(await page.evaluate(()=>window.qaVortex.progress),1);
+      assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true,'Held Space keeps the automatic recovery immersive');
+      await page.waitForFunction(()=>window.qaGrowthFrames.some(frame=>frame.growth>=.3)||window.qaCycleReady);
+      await page.screenshot({path:path.join(output,'desktop-5-regrowth.png')});
+      await page.waitForFunction(()=>window.qaCycleReady,null,{timeout:15000});
+      await resetChecks(page);
+      const recovery=await page.evaluate(()=>({ready:window.qaCycleReady,frames:window.qaGrowthFrames.slice(),reset:window.qaRegrowReset,elapsed:(window.qaCycleReady.wall-window.qaTriggerWall)/1000}));
+      assert.ok(recovery.frames.length>0&&recovery.frames[0].growth===0&&recovery.frames.every((frame,index,frames)=>frame.progress===0&&frame.growth>=0&&frame.growth<1&&(index===0||frame.growth>=frames[index-1].growth)),'The new solar system grows continuously from a rendered zero-size origin');
+      assert.ok(recovery.elapsed>=26.5&&recovery.elapsed<=38,'The first cycle includes the one-second hold and three-second regrowth');
+      assert.ok(recovery.reset.tintZero&&recovery.reset.offsetZero&&recovery.reset.trailCleared&&recovery.reset.geometrySame,'Regrowth clears influence and trail while reusing the cloud geometry');
+      assert.ok(recovery.reset.bodies.some((value,index)=>Math.abs(value-completed.state.bodies[index])>.001),'The new solar system restarts its orbital positions');
+      assert.deepEqual(recovery.ready.camera,completed.state.camera);assert.deepEqual(recovery.ready.travel,started.travel);
+      assert.equal(await page.evaluate(()=>document.fullscreenElement?.id),'hologram');assert.equal(await page.evaluate(()=>document.pointerLockElement?.id),'viewport');
+      const restoredPixels=await scenePixels(page);assert.ok(restoredPixels.lit>100,'The recovered solar system is visible at its normal size');
+      await page.screenshot({path:path.join(output,'desktop-6-ready.png')});
+      await page.keyboard.down('Space');
+      assert.equal(await page.locator('#roamCollapse').isDisabled(),false,'A held-key repeat cannot start the next cycle');
       await page.keyboard.up('Space');await page.keyboard.press('Space');
+      await page.waitForFunction(()=>document.querySelector('#roamCollapse').disabled);
+      assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true,'Fresh Space starts a second cycle without leaving fullscreen');
+      await page.keyboard.press('Escape');
       await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement&&!document.pointerLockElement);
-      const exitedAt=await page.evaluate(()=>performance.now());
-      await page.waitForFunction(time=>performance.now()>time+550,exitedAt);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,shader,expansionFrames,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['short radial expansion before unchanged vortex','strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','24.6-second real-time completion','frozen orbits, influence and launch schedule','immutable base coordinates','completed scene black','exit and re-entry reset']};
+      report.desktop={beforePixels,completePixels,restoredPixels,recovery,shader,expansionFrames,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['accelerating local expansion before unchanged vortex','strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','held-key repeat safety across recovery','camera look and wheel during collapse','unpaused jet extension and early/middle/late/black/regrowth captures','24.6-second collapse then one-second hold and three-second recovery','frozen orbits, influence and launch schedule until black','immutable base coordinates','cached black scene renders black','same-camera fullscreen regrowth and automatic rearm','fresh Space starts a second cycle','Escape and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 
@@ -315,7 +375,7 @@ const {chromium}=require('playwright');
         report.mobile.push({viewport,layout,checks:['safe action layout','Space tap with W held','movement stops','exit works during animation']});
       }finally{await mobile.context.close();}
     }
-    for(const mode of ['desktop-background-doubleclick','desktop-disabled-hud-click','mobile-hud-tap'])report.completionExits.push(await completionExitCase(mode));
+    for(const mobile of [false,true])report.cycles.push(await cycleCase(mobile));
     console.log(JSON.stringify({passed:true,...report}));
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

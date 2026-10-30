@@ -1,5 +1,5 @@
 // One optional camera mode; the overview's orbit, zoom and follow state stay untouched.
-export function createRoaming({ THREE, camera, viewport, getEarth, half, step, onStart, onCollapse }) {
+export function createRoaming({ THREE, camera, viewport, getEarth, half, step, onStart, onCollapse, onRegrow }) {
   const hologram = document.querySelector('#hologram');
   const cursor = document.createElement('div');
   cursor.id = 'rainbowCursor';
@@ -24,7 +24,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   const offset = new THREE.Vector3(), forward = new THREE.Vector3(), orbitRotation = new THREE.Euler(0,0,0,'YXZ');
   let active = false, pending = false, enteredOnce = false, locked = false, moving = false, nativeFullscreen = false, yaw = Math.PI / 4, pitch = .24, distance = 48;
   let pointer = null, lookPointer = null, heldPointer = null, touchStart = null, lastTap = null, noticeTimer, lockPending = false;
-  let collapseElapsed = -1, reenterAfter = 0;
+  let collapseElapsed = -1;
 
   function setForward(source, pressed) {
     if(pressed && collapseElapsed>=0)return;
@@ -106,14 +106,8 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if (document.pointerLockElement === viewport) document.exitPointerLock();
     if (document.fullscreenElement === hologram) document.exitFullscreen().catch(() => {});
   }
-  function dismissCompleted(event) {
-    if(!active || collapseElapsed<24.6)return;
-    event.preventDefault();event.stopImmediatePropagation();
-    reenterAfter=performance.now()+500;
-    leave();
-  }
   async function enter({automatic=false}={}) {
-    if (active || pending || performance.now()<reenterAfter || (automatic && enteredOnce) || !getEarth()) return;
+    if (active || pending || (automatic && enteredOnce) || !getEarth()) return;
     pending = true;
     try {
       const touchMode=matchMedia('(pointer:coarse)').matches;
@@ -135,12 +129,6 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       if(!active && document.pointerLockElement===viewport)document.exitPointerLock();
     }
   }
-  // Capture disabled HUD keys too, and consume the closing gesture before overview handles it.
-  document.addEventListener('pointerdown',dismissCompleted,true);
-  document.addEventListener('click',event=>{
-    if(performance.now()<reenterAfter){event.preventDefault();event.stopImmediatePropagation();return;}
-    dismissCompleted(event);
-  },true);
   document.addEventListener('dblclick', event => {
     if (event.target.closest('#roamExit,#roamForward,#roamCollapse')) return;
     event.preventDefault();
@@ -211,10 +199,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     if (event.key === 'Escape') leave();
     if(active && event.code==='Space' && !event.ctrlKey && !event.metaKey && !event.altKey){
       event.preventDefault();
-      if(!event.repeat){
-        if(collapseElapsed>=24.6)dismissCompleted(event);
-        else if(collapseElapsed<0){requestImmersive(true);startCollapse();}
-      }
+      if(!event.repeat&&collapseElapsed<0){requestImmersive(true);startCollapse();}
     }
     if (active && event.code === 'KeyW' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); if(collapseElapsed<0){if(!event.repeat)requestImmersive(true);setForward('keyboard',true);} }
   });
@@ -236,15 +221,16 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   forwardButton.addEventListener('blur',()=>setForward('button-key',false));
   collapseButton.addEventListener('pointerdown',event=>{if(active && event.button===0){event.preventDefault();startCollapse();}});
   collapseButton.addEventListener('pointerup',()=>{if(active && !nativeFullscreen)requestImmersive(true);});
-  collapseButton.addEventListener('click',startCollapse);
+  collapseButton.addEventListener('click',event=>{if(event.detail===0)startCollapse();});
   collapseButton.addEventListener('contextmenu',event=>event.preventDefault());
   hud.querySelector('#roamExit').addEventListener('click', leave);
   return {
     enter,
     get active() { return active; },
     get collapsing() { return collapseElapsed>=0; },
-    get collapseProgress() { return collapseElapsed<0?0:Math.max(0,Math.min(1,(collapseElapsed-.6)/24)); },
-    get expansion() { return collapseElapsed<0||collapseElapsed>=.6?0:Math.sin(Math.PI*collapseElapsed/.6)**2; },
+    get collapseProgress() { return collapseElapsed<0||collapseElapsed>=25.6?0:Math.max(0,Math.min(1,(collapseElapsed-.6)/24)); },
+    get expansion() { return collapseElapsed<0||collapseElapsed>=.6?0:Math.sin(Math.PI*(collapseElapsed/.6)**3)**2; },
+    get growth() { return collapseElapsed<25.6?1:Math.min(1,(collapseElapsed-25.6)/3); },
     setGrid(nextStep) { if(!active)step=nextStep; },
     get zoom() { return 78 / distance; },
     position,
@@ -253,7 +239,15 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       distance = Math.max(6, Math.min(90, distance * (delta < 0 ? .9 : 1.1)));
     },
     update(dt, elapsed=dt) {
-      if(collapseElapsed>=0)collapseElapsed=Math.min(24.6,collapseElapsed+Math.max(0,elapsed));
+      if(collapseElapsed>=0){
+        const before=collapseElapsed;let next=Math.min(28.6,collapseElapsed+Math.max(0,elapsed));
+        // Render the completed black scene and its growth origin even after a slow frame.
+        if(before<24.6&&next>=24.6)next=24.6;
+        else if(before<25.6&&next>=25.6)next=25.6;
+        collapseElapsed=next;
+        if(before<25.6&&collapseElapsed>=25.6)onRegrow?.();
+        if(collapseElapsed>=28.6)resetCollapse();
+      }
       // If lock is refused, edge turning still permits continuous orbit without dragging.
       if(document.pointerLockElement!==viewport && pointer) {
         const edgeX=Math.max(0,(pointer.x-innerWidth+24)/24)-Math.max(0,(24-pointer.x)/24);
