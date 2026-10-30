@@ -2,6 +2,7 @@ import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
 import { createRoaming } from './roaming.js?v=grid-roam-20';
 import { createPointInfluence } from './point-influence.js?v=7';
+import { createCenterTrail } from './center-trail.js?v=1';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -22,7 +23,7 @@ let renderer,scene,camera,cloud,geometry,material,simDays=0,daysPerSecond=10,pau
 const bodies=[];
 const focusOffset=new THREE.Vector3();
 let detailCloud,detailGeometry;
-let roaming, pointInfluence;
+let roaming, pointInfluence, centerTrail;
 const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=2*VISUAL_HALF/99, BODY_STEP_150=2*VISUAL_HALF/149, DETAIL_CAPACITY=16000;
 
 // Pack dense-mode bodies into adjacent fine-grid cells; every position stays on the global lattice.
@@ -103,7 +104,12 @@ void main(){
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
  vec3 renderedPosition=position+uRoam*(1.-vPlayer)*aPlayerOffset;
- if(uExpansion>0.)renderedPosition=uInfluenceCenter+(renderedPosition-uInfluenceCenter)*(1.+.12*uExpansion);
+ if(uExpansion>0.){
+   vec3 localDelta=renderedPosition-uInfluenceCenter;
+   float localRadius=length(localDelta)/uGridStep;
+   float localPush=.6*min(localRadius,5.5)*(1.-smoothstep(5.5,12.,localRadius))*uExpansion;
+   renderedPosition+=localDelta/max(localRadius,.001)*localPush;
+ }
  float collapseSize=1.;vCollapseFade=1.;
  if(uCollapse>0.){
    vec3 delta=renderedPosition-uInfluenceCenter;
@@ -217,7 +223,8 @@ function init(){
     error.code='SHADER_FAILED';throw error;
   };
   renderer.setClearColor(0x000000);renderer.setPixelRatio(Math.min(devicePixelRatio,2));scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(48,1,.1,500);camera.position.z=78;rebuild();resize();cloud.rotation.set(pitch,yaw,0);
-  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onCollapse:prepareJets,onStart:()=>{drag=null;pointInfluence.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
+  centerTrail=createCenterTrail(THREE);scene.add(centerTrail.object);
+  roaming=createRoaming({THREE,camera,viewport,getEarth:()=>bodies[3],half:VISUAL_HALF,step:BODY_STEP_50,onCollapse:prepareJets,onStart:()=>{drag=null;pointInfluence.reset();centerTrail.reset();geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true;labels.replaceChildren();leaders.replaceChildren()}});
   renderer.render(scene,camera);requestAnimationFrame(frame);
 }
 function resize(){if(!renderer)return;const r=viewport.getBoundingClientRect();renderer.setSize(r.width,r.height,false);camera.aspect=r.width/r.height;camera.updateProjectionMatrix();material?.uniforms.uViewport.value.set(r.width,r.height)}
@@ -232,6 +239,7 @@ function frame(now){
   material.uniforms.uCollapse.value=roaming.active?roaming.collapseProgress:0;
   material.uniforms.uExpansion.value=roaming.active?roaming.expansion:0;
   if(detailCloud)detailCloud.visible=!roaming.active;
+  centerTrail.update(roaming.influencePosition,dt,{active:roaming.active,time:now/1000,freeze:roaming.collapsing,fade:1-THREE.MathUtils.smoothstep(roaming.collapseProgress,0,.35)});
   // The original lattice bounds no longer describe the rotating cloud during collapse.
   cloud.frustumCulled=!roaming.collapsing;
   camera.updateProjectionMatrix();renderer.render(scene,camera);if(!roaming.active)updateLabels();

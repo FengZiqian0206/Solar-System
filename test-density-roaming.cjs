@@ -23,7 +23,7 @@ const {chromium}=require('playwright');
           if(!this.material?.uniforms?.uGridStep||this.geometry.attributes.aDetail)return;
           window.qaDensityCloud=this;window.qaDensityRenderer=renderer;window.qaDensityScene=scene;window.qaDensityCamera=camera;
           const u=this.material.uniforms;
-          window.qaDensity={count:this.geometry.attributes.position.count,active:u.uRoam.value,progress:u.uCollapse.value,expansion:u.uExpansion.value,travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray()};
+          window.qaDensity={count:this.geometry.attributes.position.count,active:u.uRoam.value,progress:u.uCollapse.value,expansion:u.uExpansion.value,time:u.uTime.value,travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray()};
           if(u.uRoam.value&&!window.qaDensityReady){window.qaDensityReady=true;console.log('QA_DENSITY_READY');}
         };
       });
@@ -39,6 +39,13 @@ const {chromium}=require('playwright');
         return {n,count:a.position.count,step,half,dense:u.uDenseMode.value,spaceScale:u.uSpaceScale.value,uuid:cloud.geometry.uuid,bounds:[base[0],base[base.length-1]],adjacentStep:base[5]-base[2],selected:[base[index*3],base[index*3+1],base[index*3+2]],player:u.uPlayer.value.toArray(),attributes:Object.fromEntries(['aSeed','aPlayerTint','aPlayerOffset','aJetDelay'].map(name=>[name,{count:a[name].count,itemSize:a[name].itemSize,bytes:a[name].array.byteLength}])),detailVisible:cloud.children.some(child=>child.visible),calls:window.qaDensityRenderer.info.render.calls,points:window.qaDensityRenderer.info.render.points,dpr:window.qaDensityRenderer.getPixelRatio(),memory:{...window.qaDensityRenderer.info.memory}};
       });
     }
+    async function centerTrailState(){
+      return page.evaluate(()=>{
+        const trail=window.qaDensityScene.getObjectByName('centerTrail');if(!trail)return null;
+        const count=trail.geometry.drawRange.count;
+        return {visible:trail.visible,lineSegments:trail.isLineSegments,count,position:Array.from(trail.geometry.attributes.position.array.slice(0,count*3)),alpha:Array.from(trail.geometry.attributes.aAlpha.array.slice(0,count)),fade:trail.material.uniforms.uFade.value,calls:window.qaDensityRenderer.info.render.calls,points:window.qaDensityRenderer.info.render.points};
+      });
+    }
     async function exercise(n){
       await page.waitForFunction(n=>window.qaDensity?.active&&window.qaDensity.count===n**3,n);
       assert.equal(await page.locator('#density').isDisabled(),true);
@@ -48,6 +55,8 @@ const {chromium}=require('playwright');
       assert.ok(state.selected.every((value,index)=>Math.abs(value-state.player[index])<.00001),'Selected player is an existing vertex of this density');
       assert.equal(state.dense,n>50?1:0);assert.equal(state.detailVisible,false,'Roaming uses the complete base lattice without the extra overview layer');
       assert.equal(state.calls,1);assert.equal(state.points,n**3);assert.equal(state.dpr,1);
+      const emptyTrail=await centerTrailState();
+      assert.ok(emptyTrail?.lineSegments&&!emptyTrail.visible&&emptyTrail.count===0,'Every roaming entry starts with a cleared centre path');
       for(const [name,attribute]of Object.entries(state.attributes)){assert.equal(attribute.count,n**3);assert.equal(attribute.itemSize,name==='aPlayerOffset'?3:1);}
       assert.equal(state.attributes.aJetDelay.bytes,n**3*4);
       await page.locator('#density').evaluate((element,value)=>{element.value=String(value);element.dispatchEvent(new Event('input',{bubbles:true}));},n===150?50:150);
@@ -65,6 +74,14 @@ const {chromium}=require('playwright');
         const cell=[p.x,p.y,p.z].map(value=>Math.round((value+half)/step)),index=(cell[0]*n+cell[1])*n+cell[2];
         return cloud.geometry.attributes.aPlayerTint.array[index]>.2;
       });
+      const movingPath=await centerTrailState();
+      assert.ok(movingPath.visible&&movingPath.lineSegments&&movingPath.count>0&&movingPath.count%2===0,'Moving creates a separate dashed centre path');
+      assert.equal(movingPath.calls,2,'The centre path adds exactly one line draw');assert.equal(movingPath.points,n**3,'The line does not change the cloud point count');
+      const stoppedAt=await page.evaluate(()=>window.qaDensity.time);
+      await page.waitForFunction(time=>window.qaDensity.time>time+.3,stoppedAt);
+      const stationaryPath=await centerTrailState();
+      assert.equal(stationaryPath.count,movingPath.count,'A stationary centre does not add path vertices');
+      assert.deepEqual(stationaryPath.position,movingPath.position,'The recorded path stays fixed while stationary');
       const pixels=await page.evaluate(async()=>{
         const {THREE}=await import('./renderer-support.js?v=visual-balance-1'),renderer=window.qaDensityRenderer,target=new THREE.WebGLRenderTarget(64,48),previous=renderer.getRenderTarget();
         try{
@@ -78,6 +95,7 @@ const {chromium}=require('playwright');
       await page.screenshot({path:path.join(output,`roaming-${n}.png`)});
       await page.keyboard.press('Space');
       await page.waitForFunction(()=>window.qaDensity.progress>0);
+      const frozenPath=await centerTrailState();
       const jets=await page.evaluate(()=>{
         const cloud=window.qaDensityCloud,a=cloud.geometry.attributes,u=cloud.material.uniforms,n=Math.round(Math.cbrt(a.position.count)),step=u.uGridStep.value,half=u.uHalf.value,center=u.uInfluenceCenter.value,player=u.uPlayer.value,base=a.position.array,offset=a.aPlayerOffset.array,cells=[],local=[];
         const lo=axis=>Math.max(0,Math.ceil((center[axis]-4*step+half)/step)),hi=axis=>Math.min(n-1,Math.floor((center[axis]+4*step+half)/step));
@@ -102,10 +120,16 @@ const {chromium}=require('playwright');
         return {geometry:saved.positions===a.position.array,influence:saved.local.every(cell=>a.aPlayerTint.array[cell.index]===cell.tint&&cell.offset.every((value,axis)=>a.aPlayerOffset.array[cell.index*3+axis]===value)),delays:saved.local.every(cell=>a.aJetDelay.array[cell.index]===cell.delay),travel:saved.travel.every((value,index)=>u.uInfluenceCenter.value.getComponent(index)===value),bodies:saved.bodies.every((value,index)=>u.uBodies.value[Math.floor(index/4)].getComponent(index%4)===value)};
       });
       assert.ok(Object.values(frozen).every(Boolean),'Collapse freezes the rebuilt influence, orbit and launch data');
+      const fadedPath=await centerTrailState();
+      assert.equal(fadedPath.count,frozenPath.count);assert.deepEqual(fadedPath.position,frozenPath.position);assert.deepEqual(fadedPath.alpha,frozenPath.alpha,'Collapse freezes path sampling and vertex ages');
+      assert.ok(fadedPath.fade<frozenPath.fade&&fadedPath.fade>=0,'The frozen path fades during the existing vortex');
+      assert.equal(fadedPath.calls,1+Number(fadedPath.visible&&fadedPath.count>0));assert.equal(fadedPath.points,n**3);
       await page.locator('#roamExit').click();
       await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&window.qaDensity?.active===0);
       assert.equal(await page.locator('#density').isDisabled(),false,'Exit restores overview density control');
-      densities.push({n,...state,litPixels:pixels,jets:{count:jets.cells.length,spacing,gridStep:jets.step},frozen});
+      const clearedPath=await centerTrailState();
+      assert.ok(!clearedPath.visible&&clearedPath.count===0,'Exit hides and clears the centre path');
+      densities.push({n,...state,litPixels:pixels,jets:{count:jets.cells.length,spacing,gridStep:jets.step},centerTrail:{movingVertices:path.count,stationaryVertices:stationaryPath.count,frozenVertices:frozenPath.count,fadeBefore:frozenPath.fade,fadeAfter:fadedPath.fade,cleared:true},frozen});
     }
     await exercise(50);
     for(const n of [100,150,50]){

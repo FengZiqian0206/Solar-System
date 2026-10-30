@@ -131,6 +131,7 @@ const { chromium } = require('playwright');
         const actual=new THREE.Vector3().fromBufferAttribute(cloud.geometry.attributes.position,index).toArray();
         window.qaCloud=cloud;
         window.qaRenderer=renderer;
+        window.qaScene=scene;
         window.cameraSample=camera.position.toArray();
         window.roamSample={player,earth:u.uBodies.value[3].toArray().slice(0,3),time:u.uTime.value,active:u.uRoam.value,
           direction:camera.getWorldDirection(direction).toArray(),quaternion:camera.quaternion.toArray(),count:cloud.geometry.attributes.position.count,
@@ -267,8 +268,11 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('#leaders').isVisible(), false);
     assert.equal(await page.locator('#rainbowCursor').isVisible(), false);
     await page.waitForFunction(() => window.cameraSample && window.roamSample?.active);
-    const entry=await page.evaluate(()=>window.roamSample);
-    assert.equal(entry.matches,true); assert.equal(entry.count,125000); assert.equal(entry.calls,1); assert.equal(entry.points,125000);
+    const entry=await page.evaluate(()=>{
+      const trail=window.qaScene.getObjectByName('centerTrail');
+      return {...window.roamSample,calls:window.qaRenderer.info.render.calls,points:window.qaRenderer.info.render.points,trailVisible:!!(trail?.visible&&trail.geometry.drawRange.count>0)};
+    });
+    assert.equal(entry.matches,true); assert.equal(entry.count,125000); assert.equal(entry.calls,1+Number(entry.trailVisible)); assert.equal(entry.points,125000);
     assert.equal(await page.locator('#density').isDisabled(),true,'Active roaming locks density');
     assert.ok(entry.player.every((v,i)=>Math.abs(v-entry.earth[i])<=52/49/2+.001));
     const entryCamera=await page.evaluate(()=>window.cameraSample);
@@ -326,6 +330,11 @@ const { chromium } = require('playwright');
     await page.waitForFunction(()=>document.querySelector('#roamForward').classList.contains('is-held') && document.querySelector('#roamForward').getAttribute('aria-pressed')==='true');
     await page.waitForFunction(start=>Math.hypot(...window.roamSample.player.map((v,i)=>v-start[i]))>3,startMove.player);
     const moved=await page.evaluate(()=>window.roamSample);
+    const pathRender=await page.evaluate(()=>{
+      const trail=window.qaScene.getObjectByName('centerTrail');
+      return {visible:trail?.visible,count:trail?.geometry.drawRange.count,lineSegments:trail?.isLineSegments,calls:window.qaRenderer.info.render.calls,points:window.qaRenderer.info.render.points};
+    });
+    assert.ok(pathRender.visible&&pathRender.lineSegments&&pathRender.count>0);assert.equal(pathRender.calls,2);assert.equal(pathRender.points,125000,'Centre path adds one line draw without adding cloud points');
     const movedCamera=await page.evaluate(()=>window.cameraSample);
     const motion=await page.evaluate(()=>window.qaMovement);
     const speed=motion.distance/motion.seconds;
