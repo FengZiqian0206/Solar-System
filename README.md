@@ -2,7 +2,9 @@
 
 Direct access to run: https://fengziqian0206.github.io/Solar-System/
 
-How to play: "WASD" to move; "Space" to trigger events; "Double-click" to enter the game mode; "ESC" to exit
+How to play: 
+
+"WASD" to move; "Space" to trigger events; "Double-click" to enter the game mode; "ESC" to exit
 
 Project Introduction
 
@@ -24,13 +26,13 @@ Players can move freely, observe the effects of their actions and trigger unexpe
 
 <img width="3440" height="1440" alt="55" src="https://github.com/user-attachments/assets/ce7bf4cd-fc2a-4ea6-8d69-29d4eb50df17" />
 
-<img width="1280" height="900" alt="main2" src="https://github.com/user-attachments/assets/90059f90-e774-4e0c-bf62-cbe7ee7ab203" />
-
 The main loop :
 
 Move around → Discover the repulsion effect → Observe the movement trail → See how your actions affect other planets → Trigger a random event at any time → Change the solar system → Restore it and start again.
 
 The main idea is to let players explore, experiment and see how their actions can change the whole solar system.
+
+<img width="1280" height="900" alt="main2" src="https://github.com/user-attachments/assets/90059f90-e774-4e0c-bf62-cbe7ee7ab203" />
 
 Assignment 2（Previous content）：
 
