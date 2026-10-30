@@ -1,5 +1,6 @@
 // One optional camera mode; the overview's orbit, zoom and follow state stay untouched.
 export function createRoaming({ THREE, camera, viewport, getEarth, half, step, onStart, onCollapse, onRegrow }) {
+  const expansionDuration=.9,collapseEnd=expansionDuration+24,growthStart=collapseEnd+1,cycleEnd=growthStart+3;
   const hologram = document.querySelector('#hologram');
   const cursor = document.createElement('div');
   cursor.id = 'rainbowCursor';
@@ -228,9 +229,9 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     enter,
     get active() { return active; },
     get collapsing() { return collapseElapsed>=0; },
-    get collapseProgress() { return collapseElapsed<0||collapseElapsed>=25.6?0:Math.max(0,Math.min(1,(collapseElapsed-.6)/24)); },
-    get expansion() { return collapseElapsed<0||collapseElapsed>=.6?0:Math.sin(Math.PI*(collapseElapsed/.6)**3)**2; },
-    get growth() { return collapseElapsed<25.6?1:Math.min(1,(collapseElapsed-25.6)/3); },
+    get collapseProgress() { return collapseElapsed<0||collapseElapsed>=growthStart?0:collapseElapsed>=collapseEnd?1:Math.max(0,(collapseElapsed-expansionDuration)/24); },
+    get expansion() { return collapseElapsed<0||collapseElapsed>=expansionDuration?0:Math.sin(Math.PI*collapseElapsed/expansionDuration)**2; },
+    get growth() { return collapseElapsed<growthStart?1:Math.min(1,(collapseElapsed-growthStart)/3); },
     setGrid(nextStep) { if(!active)step=nextStep; },
     get zoom() { return 78 / distance; },
     position,
@@ -240,13 +241,13 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     },
     update(dt, elapsed=dt) {
       if(collapseElapsed>=0){
-        const before=collapseElapsed;let next=Math.min(28.6,collapseElapsed+Math.max(0,elapsed));
+        const before=collapseElapsed;let next=Math.min(cycleEnd,collapseElapsed+Math.max(0,elapsed));
         // Render the completed black scene and its growth origin even after a slow frame.
-        if(before<24.6&&next>=24.6)next=24.6;
-        else if(before<25.6&&next>=25.6)next=25.6;
+        if(before<collapseEnd&&next>=collapseEnd)next=collapseEnd;
+        else if(before<growthStart&&next>=growthStart)next=growthStart;
         collapseElapsed=next;
-        if(before<25.6&&collapseElapsed>=25.6)onRegrow?.();
-        if(collapseElapsed>=28.6)resetCollapse();
+        if(before<growthStart&&collapseElapsed>=growthStart)onRegrow?.();
+        if(collapseElapsed>=cycleEnd)resetCollapse();
       }
       // If lock is refused, edge turning still permits continuous orbit without dragging.
       if(document.pointerLockElement!==viewport && pointer) {
