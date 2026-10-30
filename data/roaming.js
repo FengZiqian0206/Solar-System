@@ -10,9 +10,9 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   const hud = document.createElement('div');
   hud.id = 'roamHud';
   hud.hidden = true;
-  hud.innerHTML = '<span class="roam-instructions"><span class="roam-look-desktop">移动鼠标环顾 · MOVE MOUSE TO LOOK<br>滚轮缩放 · SCROLL TO ZOOM</span><span class="roam-look-touch">滑动环顾 · DRAG TO LOOK</span></span><button id="roamExit" type="button">退出漫游 · EXIT <kbd>Esc</kbd></button><div class="roam-forward"><button id="roamForward" type="button" aria-label="Hold W to move forward" aria-describedby="roamForwardHint" aria-keyshortcuts="W" aria-pressed="false">W</button><small id="roamForwardHint">HOLD W TO<br>MOVE FORWARD</small></div><div class="roam-collapse"><button id="roamCollapse" type="button" aria-label="看看会发生什么 · See what happens" aria-describedby="roamCollapseHint" aria-keyshortcuts="Space" aria-pressed="false">SPACE</button><small id="roamCollapseHint">看看会发生什么<br><span>SEE WHAT HAPPENS</span></small></div>';
+  hud.innerHTML = '<span class="roam-instructions"><span class="roam-look-desktop">移动鼠标环顾 · MOVE MOUSE TO LOOK<br>滚轮缩放 · SCROLL TO ZOOM</span><span class="roam-look-touch">滑动环顾 · DRAG TO LOOK</span></span><button id="roamExit" type="button">退出漫游 · EXIT <kbd>Esc</kbd></button><div class="roam-movement"><div class="roam-keys"><button class="roam-key" id="roamForward" data-move="KeyW" type="button" aria-label="Hold W to move forward" aria-describedby="roamMoveHint" aria-keyshortcuts="W" aria-pressed="false">W</button><button class="roam-key" id="roamLeft" data-move="KeyA" type="button" aria-label="Hold A to move left" aria-describedby="roamMoveHint" aria-keyshortcuts="A" aria-pressed="false">A</button><button class="roam-key" id="roamBackward" data-move="KeyS" type="button" aria-label="Hold S to move backward" aria-describedby="roamMoveHint" aria-keyshortcuts="S" aria-pressed="false">S</button><button class="roam-key" id="roamRight" data-move="KeyD" type="button" aria-label="Hold D to move right" aria-describedby="roamMoveHint" aria-keyshortcuts="D" aria-pressed="false">D</button></div><small id="roamMoveHint">HOLD WASD TO<br>MOVE</small></div><div class="roam-collapse"><button id="roamCollapse" type="button" aria-label="看看会发生什么 · See what happens" aria-describedby="roamCollapseHint" aria-keyshortcuts="Space" aria-pressed="false">SPACE</button><small id="roamCollapseHint">看看会发生什么<br><span>SEE WHAT HAPPENS</span></small></div>';
   hologram.append(hud);
-  const forwardButton = hud.querySelector('#roamForward'), movementInputs = new Set();
+  const movementKeys = new Map(Array.from(hud.querySelectorAll('[data-move]'),button=>[button.dataset.move,{button,inputs:new Set(),pointer:null}]));
   const collapseButton = hud.querySelector('#roamCollapse');
   const notice = document.createElement('div');
   notice.id = 'roamNotice';
@@ -22,31 +22,35 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
   // Motion is integrated continuously, but only an existing lattice vertex is highlighted.
   // Nearby points can render off-grid; the player and base lattice stay on-grid.
   const position = new THREE.Vector3(), travel = new THREE.Vector3();
-  const offset = new THREE.Vector3(), forward = new THREE.Vector3(), orbitRotation = new THREE.Euler(0,0,0,'YXZ');
-  let active = false, pending = false, enteredOnce = false, locked = false, moving = false, nativeFullscreen = false, yaw = Math.PI / 4, pitch = .24, distance = 48;
-  let pointer = null, lookPointer = null, heldPointer = null, touchStart = null, lastTap = null, noticeTimer, lockPending = false;
+  const offset = new THREE.Vector3(), forward = new THREE.Vector3(), right = new THREE.Vector3(), movement = new THREE.Vector3(), orbitRotation = new THREE.Euler(0,0,0,'YXZ');
+  let active = false, pending = false, enteredOnce = false, locked = false, nativeFullscreen = false, yaw = Math.PI / 4, pitch = .24, distance = 48;
+  let pointer = null, lookPointer = null, touchStart = null, lastTap = null, noticeTimer, lockPending = false;
   let collapseElapsed = -1;
 
-  function setForward(source, pressed) {
+  function setMovement(code, source, pressed) {
+    const key=movementKeys.get(code);
+    if(!key)return;
     if(pressed && collapseElapsed>=0)return;
-    if(pressed)movementInputs.add(source);else movementInputs.delete(source);
-    moving=movementInputs.size>0;
-    forwardButton.classList.toggle('is-held',moving);
-    forwardButton.setAttribute('aria-pressed',String(moving));
+    if(pressed)key.inputs.add(source);else key.inputs.delete(source);
+    const held=key.inputs.size>0;
+    key.button.classList.toggle('is-held',held);
+    key.button.setAttribute('aria-pressed',String(held));
   }
   function stopMovement() {
-    const id=heldPointer;heldPointer=null;
-    movementInputs.clear();setForward('keyboard',false);
-    if(id!==null && forwardButton.hasPointerCapture(id))forwardButton.releasePointerCapture(id);
+    for(const [code,key] of movementKeys){
+      const id=key.pointer;key.pointer=null;
+      key.inputs.clear();setMovement(code,'keyboard',false);
+      if(id!==null && key.button.hasPointerCapture(id))key.button.releasePointerCapture(id);
+    }
   }
   function resetCollapse() {
-    collapseElapsed=-1;forwardButton.disabled=false;collapseButton.disabled=false;
+    collapseElapsed=-1;for(const {button} of movementKeys.values())button.disabled=false;collapseButton.disabled=false;
     collapseButton.classList.remove('is-held');collapseButton.setAttribute('aria-pressed','false');
   }
   function startCollapse() {
     if(!active || collapseElapsed>=0)return;
     stopMovement();onCollapse?.();collapseElapsed=0;
-    forwardButton.disabled=true;collapseButton.disabled=true;
+    for(const {button} of movementKeys.values())button.disabled=true;collapseButton.disabled=true;
     collapseButton.classList.add('is-held');collapseButton.setAttribute('aria-pressed','true');
   }
 
@@ -131,7 +135,7 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
     }
   }
   document.addEventListener('dblclick', event => {
-    if (event.target.closest('#roamExit,#roamForward,#roamCollapse')) return;
+    if (event.target.closest('#roamExit,.roam-key,#roamCollapse')) return;
     event.preventDefault();
     enter();
   });
@@ -202,24 +206,27 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
       event.preventDefault();
       if(!event.repeat&&collapseElapsed<0){requestImmersive(true);startCollapse();}
     }
-    if (active && event.code === 'KeyW' && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); if(collapseElapsed<0){if(!event.repeat)requestImmersive(true);setForward('keyboard',true);} }
+    if (active && movementKeys.has(event.code) && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); if(collapseElapsed<0){if(!event.repeat)requestImmersive(true);setMovement(event.code,'keyboard',true);} }
   });
-  document.addEventListener('keyup', event => { if (event.code === 'KeyW') setForward('keyboard',false); });
-  forwardButton.addEventListener('pointerdown',event=>{
-    if(!active || event.button!==0 || heldPointer!==null)return;
-    event.preventDefault();heldPointer=event.pointerId;
-    forwardButton.setPointerCapture(event.pointerId);setForward('pointer',true);
-  });
-  forwardButton.addEventListener('contextmenu',event=>event.preventDefault());
-  for(const type of ['pointerup','pointercancel','lostpointercapture'])forwardButton.addEventListener(type,event=>{
-    if(event.pointerId===heldPointer){
-      if(type==='pointerup' && active && !nativeFullscreen)requestImmersive(true);
-      heldPointer=null;setForward('pointer',false);
-    }
-  });
-  forwardButton.addEventListener('keydown',event=>{if(active && event.code==='Enter'){event.preventDefault();setForward('button-key',true);}});
-  forwardButton.addEventListener('keyup',event=>{if(event.code==='Enter'){event.preventDefault();setForward('button-key',false);}});
-  forwardButton.addEventListener('blur',()=>setForward('button-key',false));
+  document.addEventListener('keyup', event => setMovement(event.code,'keyboard',false));
+  for(const [code,key] of movementKeys){
+    const button=key.button;
+    button.addEventListener('pointerdown',event=>{
+      if(!active || collapseElapsed>=0 || event.button!==0 || key.pointer!==null)return;
+      event.preventDefault();key.pointer=event.pointerId;
+      button.setPointerCapture(event.pointerId);setMovement(code,'pointer',true);
+    });
+    button.addEventListener('contextmenu',event=>event.preventDefault());
+    for(const type of ['pointerup','pointercancel','lostpointercapture'])button.addEventListener(type,event=>{
+      if(event.pointerId===key.pointer){
+        if(type==='pointerup' && active && !nativeFullscreen)requestImmersive(true);
+        key.pointer=null;setMovement(code,'pointer',false);
+      }
+    });
+    button.addEventListener('keydown',event=>{if(active && event.code==='Enter'){event.preventDefault();setMovement(code,'button-key',true);}});
+    button.addEventListener('keyup',event=>{if(event.code==='Enter'){event.preventDefault();setMovement(code,'button-key',false);}});
+    button.addEventListener('blur',()=>setMovement(code,'button-key',false));
+  }
   collapseButton.addEventListener('pointerdown',event=>{if(active && event.button===0){event.preventDefault();startCollapse();}});
   collapseButton.addEventListener('pointerup',()=>{if(active && !nativeFullscreen)requestImmersive(true);});
   collapseButton.addEventListener('click',event=>{if(event.detail===0)startCollapse();});
@@ -256,9 +263,13 @@ export function createRoaming({ THREE, camera, viewport, getEarth, half, step, o
         rotate(Math.max(-1,Math.min(1,edgeX))*dt*400,Math.max(-1,Math.min(1,edgeY))*dt*400);
       }
       aimCamera();
-      if (moving) {
+      const forwardAxis=Number(movementKeys.get('KeyW').inputs.size>0)-Number(movementKeys.get('KeyS').inputs.size>0);
+      const rightAxis=Number(movementKeys.get('KeyD').inputs.size>0)-Number(movementKeys.get('KeyA').inputs.size>0);
+      if (forwardAxis || rightAxis) {
         camera.getWorldDirection(forward);
-        travel.addScaledVector(forward, Math.min(dt, .1) * 6);
+        right.set(1,0,0).applyQuaternion(camera.quaternion);
+        movement.copy(forward).multiplyScalar(forwardAxis).addScaledVector(right,rightAxis).normalize();
+        travel.addScaledVector(movement, Math.min(dt, .1) * 6);
         snapToGrid();
         aimCamera();
       }

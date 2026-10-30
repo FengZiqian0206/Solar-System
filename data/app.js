@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-23';
+import { createRoaming } from './roaming.js?v=grid-roam-24';
 import { createPointInfluence } from './point-influence.js?v=7';
 import { createCenterTrail } from './center-trail.js?v=1';
 
@@ -135,10 +135,12 @@ void main(){
      float insideTime=max(0.,(uCollapse-entryProgress)*24.);
      float currentRadius=insideTime>0.?coreRadius*exp(-2.5*insideTime):freeRadius;
      float contraction=clamp(1.-currentRadius/initialRadius,0.,1.);
-     float angle=uCollapse*uCollapse*(90.+250.*(1.-clamp(initialRadius/maxRadius,0.,1.)))+48.*contraction;
+     // Each point first contracts along its original ray, then smoothly starts twisting inside one-third radius.
+     float spin=smoothstep(2./3.,1.,contraction);
+     float angle=spin*(uCollapse*uCollapse*(90.+250.*(1.-clamp(initialRadius/maxRadius,0.,1.)))+48.*contraction);
      float cs=cos(angle),sn=sin(angle);
      vec3 direction=delta/initialRadius;
-     direction.y*=mix(1.,.12,smoothstep(0.,.9,contraction));
+     direction.y*=mix(1.,.12,spin);
      direction=normalize(direction);
      direction=vec3(cs*direction.x-sn*direction.z,direction.y,sn*direction.x+cs*direction.z);
      renderedPosition=uInfluenceCenter+direction*currentRadius;

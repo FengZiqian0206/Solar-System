@@ -120,10 +120,13 @@ const {chromium}=require('playwright');
         const half=material.uniforms.uHalf.value,center=material.uniforms.uInfluenceCenter.value;
         const coreRadius=2.1*material.uniforms.uGridStep.value,maxRadius=Math.hypot(half+Math.abs(center.x),half+Math.abs(center.y),half+Math.abs(center.z))+1.8*material.uniforms.uGridStep.value,capacity=maxRadius*24/22;
         const entryProgress=Math.sqrt(16*16-coreRadius*coreRadius)/capacity;
-        const rotation=Array.from({length:25},(_,index)=>{
-          const point=probe(48,index/100);
-          return {progress:point.progress,angle:Math.atan2(-point.top.y,point.front.x),radius:point.radius,alpha:point.front.maxAlpha};
-        });
+        const progressAt=(radius,ratio)=>radius*Math.sqrt(1-ratio*ratio)/capacity;
+        function rotationAt(radius,ratio){
+          const point=probe(radius,progressAt(radius,ratio));
+          return {ratio,progress:point.progress,angle:Math.atan2(point.position[2],point.position[0]),radius:point.radius,position:point.position,alpha:point.front.maxAlpha};
+        }
+        const spinRatios=[1,.5,.34,1/3,.3332,.30,.28],nearRotation=spinRatios.map(ratio=>rotationAt(16,ratio)),farRotation=spinRatios.map(ratio=>rotationAt(48,ratio));
+        const rotation={near:{initialRadius:16,points:nearRotation},far:{initialRadius:48,points:farRotation},tilted:probe([12.8,9.6,0],progressAt(16,.5)),sameProgress:{near:nearRotation.at(-1),far:probe(48,nearRotation.at(-1).progress)},dense:Array.from({length:31},(_,index)=>rotationAt(48,1/3-(1/3-.25)*index/30))};
         const preparation=.25/24,jetTimes=[0,.00001,.3/24+preparation,.9/24+preparation,2.5/24+preparation,3.1/24+preparation,4/24+preparation];
         const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
         const pulseAt=steps=>{const source=[steps*material.uniforms.uGridStep.value,0,0];return {base:probe(source,0),peak:probe(source,0,0,1),reset:probe(source,0)};};
@@ -247,12 +250,20 @@ const {chromium}=require('playwright');
       assert.ok(Math.hypot(...shader.sequence.waiting.position.map((value,index)=>value-shader.jets.upper[0].position[index]))<.35&&shader.sequence.waiting.front.maxAlpha===shader.jets.upper[0].alpha,'A particle remains at its original position and opacity until its own launch delay');
       assert.ok(shader.sequence.first.position[1]>shader.sequence.waiting.position[1]+.8&&shader.sequence.later.position[1]>shader.sequence.waiting.position[1]+.8,'Different delays produce distinct launch times');
       assert.equal(shader.far[3].front.weight,0);assert.equal(shader.far[3].top.weight,0);assert.equal(shader.core[4].weight,0,'All particles, including the selected point, vanish by completion');
+      for(const branch of [shader.rotation.near,shader.rotation.far]){
+        assert.ok(branch.points.every(point=>Math.abs(point.radius-branch.initialRadius*point.ratio)<.2),'Changing spin preserves each point\'s original radial contraction curve');
+        assert.ok(branch.points.filter(point=>point.ratio>=1/3).every(point=>Math.abs(point.angle)<.05),'Points keep their original direction until their own radius reaches one third');
+        assert.ok(Math.abs(branch.points.find(point=>point.ratio===.3332).angle)<.05,'Rotation begins without an angular jump immediately inside the threshold');
+        assert.ok(branch.points.filter(point=>point.ratio<=.30).every(point=>Math.abs(point.angle)>.4),'Particles turn clearly after contracting inside one-third radius');
+      }
+      assert.ok(Math.hypot(...shader.rotation.tilted.position.map((value,index)=>value-[6.4,4.8,0][index]))<.2,'The initial tilted 3D ray stays unchanged before spinning, including its vertical direction');
+      assert.ok(Math.abs(shader.rotation.sameProgress.near.angle)>.4&&Math.abs(Math.atan2(shader.rotation.sameProgress.far.position[2],shader.rotation.sameProgress.far.position[0]))<.05,'At one global time only the particle that reached its own radial threshold spins');
       let cumulativeRotation=0,largestRotationStep=0;
-      for(let index=1;index<shader.rotation.length;index++){
-        const difference=shader.rotation[index].angle-shader.rotation[index-1].angle,step=Math.atan2(Math.sin(difference),Math.cos(difference));
+      for(let index=1;index<shader.rotation.dense.length;index++){
+        const difference=shader.rotation.dense[index].angle-shader.rotation.dense[index-1].angle,step=Math.atan2(Math.sin(difference),Math.cos(difference));
         cumulativeRotation+=step;largestRotationStep=Math.max(largestRotationStep,Math.abs(step));
       }
-      assert.ok(Math.abs(cumulativeRotation)>8,'Dense GPU samples show several radians of strong twisting before progress .24');
+      assert.ok(Math.abs(cumulativeRotation)>8&&largestRotationStep<Math.PI*.75,'Dense radial samples show strong, continuously resolved twisting after the one-third threshold');
       const beforePixels=await scenePixels(page);assert.ok(beforePixels.lit>100,'The original point cloud renders before collapse');
       await page.screenshot({path:path.join(output,'desktop-0-before.png')});
       await page.keyboard.down('w');
@@ -349,13 +360,13 @@ const {chromium}=require('playwright');
         await resetChecks(page);
         const layout=await page.evaluate(()=>{
           const bounds=id=>{const r=document.querySelector(id).getBoundingClientRect();return {x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height};};
-          return {width:innerWidth,height:innerHeight,space:bounds('#roamCollapse'),spaceHint:bounds('#roamCollapseHint'),w:bounds('#roamForward'),wHint:bounds('#roamForwardHint'),exit:bounds('#roamExit')};
+          return {width:innerWidth,height:innerHeight,space:bounds('#roamCollapse'),spaceHint:bounds('#roamCollapseHint'),w:bounds('#roamForward'),a:bounds('#roamLeft'),s:bounds('#roamBackward'),d:bounds('#roamRight'),moveHint:bounds('#roamMoveHint'),exit:bounds('#roamExit')};
         });
-        for(const rect of [layout.space,layout.spaceHint,layout.w,layout.wHint,layout.exit])assert.ok(rect.x>=0&&rect.y>=0&&rect.right<=layout.width+1&&rect.bottom<=layout.height+1,'Mobile action and hints fit inside viewport');
+        for(const rect of [layout.space,layout.spaceHint,layout.w,layout.a,layout.s,layout.d,layout.moveHint,layout.exit])assert.ok(rect.x>=0&&rect.y>=0&&rect.right<=layout.width+1&&rect.bottom<=layout.height+1,'All mobile WASD keys, actions and hints fit inside viewport');
         const intersects=(a,b)=>Math.min(a.right,b.right)-Math.max(a.x,b.x)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.y,b.y)>1;
-        const controls=[layout.space,layout.spaceHint,layout.w,layout.wHint];
-        assert.ok(controls.every((rect,index)=>controls.slice(index+1).every(other=>!intersects(rect,other))),'Space, W and their hints do not overlap');
-        assert.ok(layout.space.width>layout.w.width*1.25&&layout.space.height>=44,'Space is a wide physical-key touch target');
+        const controls=[layout.space,layout.spaceHint,layout.w,layout.a,layout.s,layout.d,layout.moveHint,layout.exit];
+        assert.ok(controls.every((rect,index)=>controls.slice(index+1).every(other=>!intersects(rect,other))),'Space, all four movement keys, Exit and their hints do not overlap');
+        assert.ok(layout.space.width>Math.max(layout.w.width,layout.a.width,layout.s.width,layout.d.width)*1.25&&layout.space.height>=44,'Space remains wider than every movement key');
         await page.screenshot({path:path.join(output,`mobile-${viewport.width}x${viewport.height}-before.png`)});
         const cdp=await mobile.context.newCDPSession(page),w={id:1,x:layout.w.x+layout.w.width/2,y:layout.w.y+layout.w.height/2,radiusX:4,radiusY:4,force:.7},space={id:2,x:layout.space.x+layout.space.width/2,y:layout.space.y+layout.space.height/2,radiusX:4,radiusY:4,force:.7};
         await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[w]});

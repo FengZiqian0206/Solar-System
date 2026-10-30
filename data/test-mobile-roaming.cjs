@@ -92,13 +92,13 @@ const {chromium}=require('playwright');
         assert.equal(await page.evaluate(()=>document.fullscreenElement?.id||null),profile.fullscreen==='native'?'hologram':null);
         const layout=await page.evaluate(()=>{
           const bounds=selector=>{const r=document.querySelector(selector).getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height,right:r.right,bottom:r.bottom};};
-          return {width:innerWidth,height:innerHeight,hologram:bounds('#hologram'),key:bounds('#roamForward'),hint:bounds('#roamForwardHint'),exit:bounds('#roamExit'),font:parseFloat(getComputedStyle(document.querySelector('#roamForwardHint')).fontSize),hintText:document.querySelector('#roamForwardHint').innerText.replace(/\s+/g,' '),bodyOverflow:getComputedStyle(document.body).overflow};
+          return {width:innerWidth,height:innerHeight,hologram:bounds('#hologram'),key:bounds('#roamForward'),keys:Array.from(document.querySelectorAll('.roam-key'),button=>bounds('#'+button.id)),group:bounds('.roam-keys'),hint:bounds('#roamMoveHint'),exit:bounds('#roamExit'),font:parseFloat(getComputedStyle(document.querySelector('#roamMoveHint')).fontSize),hintText:document.querySelector('#roamMoveHint').innerText.replace(/\s+/g,' '),bodyOverflow:getComputedStyle(document.body).overflow};
         });
         assert.ok(Math.abs(layout.hologram.x)<1&&Math.abs(layout.hologram.y)<1&&Math.abs(layout.hologram.width-layout.width)<1&&Math.abs(layout.hologram.height-layout.height)<1,'Roaming fills the mobile viewport');
-        for(const rect of [layout.key,layout.hint,layout.exit])assert.ok(rect.x>=0&&rect.y>=0&&rect.right<=layout.width+1&&rect.bottom<=layout.height+1,'Mobile controls fit inside viewport');
-        assert.ok(layout.key.width>=55&&layout.key.height>=55,'W has a full-size touch target');
-        assert.ok(layout.hint.x>=layout.key.right&&layout.font<=11,'Small English hint sits to the right of W');
-        assert.equal(layout.hintText,'HOLD W TO MOVE FORWARD');
+        for(const rect of [...layout.keys,layout.hint,layout.exit])assert.ok(rect.x>=0&&rect.y>=0&&rect.right<=layout.width+1&&rect.bottom<=layout.height+1,'Mobile controls fit inside viewport');
+        assert.ok(layout.keys.every(key=>key.width>=44&&key.height>=44),'All four movement keys have usable touch targets');
+        assert.ok((layout.hint.bottom<=layout.group.y||layout.hint.x>=layout.group.right)&&layout.font<=11,'Small English hint stays outside the WASD key group');
+        assert.equal(layout.hintText,'HOLD WASD TO MOVE');
         assert.ok(layout.exit.y<60&&layout.exit.right>layout.width-80,'Exit sits at the top right');
         assert.equal(layout.bodyOverflow,'hidden');
         const entry=await page.evaluate(()=>window.qaSample),entryDistance=Math.hypot(...entry.camera.map((v,i)=>v-entry.travel[i]));
