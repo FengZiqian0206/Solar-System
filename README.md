@@ -2,9 +2,19 @@
 
 Direct access to run: https://fengziqian0206.github.io/Solar-System/
 
-<img width="1280" height="900" alt="main2" src="https://github.com/user-attachments/assets/90059f90-e774-4e0c-bf62-cbe7ee7ab203" />
+How to play: "WASD" to move; "Space" to trigger events; "Double-click" to enter the game mode; "ESC" to exit
+
+Project Introduction
+
+This project is an interactive experience built on my original solar system visualisation. Instead of simply showing planetary data and information, I wanted users to enter the point-cloud universe and explore it through interaction.
+
+Players can enter full-screen game mode and control a strange planet from a third-person view. The planet can move freely through the solar system, with constantly changing colours, a repulsion field and a movement trail. It can push nearby point clouds away and temporarily change the colours of other planets. Players can also press the Space key to trigger random events, such as turning into a black hole or activating other special effects that can change the entire virtual solar system.
+
+Players can move freely, observe the effects of their actions and trigger unexpected events at any time, making the solar system constantly change through their interactions.
 
 <img width="3440" height="1440" alt="11" src="https://github.com/user-attachments/assets/dfbc8da3-0a4d-4bc8-a0ce-aa63f9e3e6e0" />
+
+<img width="3440" height="1440" alt="1 5" src="https://github.com/user-attachments/assets/c5b5f4ed-aa9f-45e4-8a31-97569819c8d0" />
 
 <img width="3440" height="1440" alt="22" src="https://github.com/user-attachments/assets/3ca306aa-d954-4245-afa4-86b7cfcfc536" />
 
@@ -14,8 +24,15 @@ Direct access to run: https://fengziqian0206.github.io/Solar-System/
 
 <img width="3440" height="1440" alt="55" src="https://github.com/user-attachments/assets/ce7bf4cd-fc2a-4ea6-8d69-29d4eb50df17" />
 
+<img width="1280" height="900" alt="main2" src="https://github.com/user-attachments/assets/90059f90-e774-4e0c-bf62-cbe7ee7ab203" />
 
+The main loop :
 
+Move around → Discover the repulsion effect → Observe the movement trail → See how your actions affect other planets → Trigger a random event at any time → Change the solar system → Restore it and start again.
+
+The main idea is to let players explore, experiment and see how their actions can change the whole solar system.
+
+Assignment 2（Previous content）：
 
 <img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
 
