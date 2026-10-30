@@ -1,6 +1,6 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-24';
+import { createRoaming } from './roaming.js?v=grid-roam-25';
 import { createPointInfluence } from './point-influence.js?v=7';
 import { createCenterTrail } from './center-trail.js?v=1';
 
@@ -104,13 +104,7 @@ void main(){
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
  vec3 renderedPosition=position+uRoam*(1.-vPlayer)*aPlayerOffset;
- if(uExpansion>0.){
-   vec3 localDelta=renderedPosition-uInfluenceCenter;
-   float localRadius=length(localDelta)/uGridStep;
-   float localPush=.6*min(localRadius,5.5)*(1.-smoothstep(5.5,12.,localRadius))*uExpansion;
-   renderedPosition+=localDelta/max(localRadius,.001)*localPush;
- }
- float collapseSize=1.;vCollapseFade=1.;
+ float collapseSize=1.,pulse=uExpansion;vCollapseFade=1.;
  if(uCollapse>0.){
    vec3 delta=renderedPosition-uInfluenceCenter;
    float initialRadius=length(delta),coreRadius=2.1*uGridStep;
@@ -119,6 +113,7 @@ void main(){
      float launchTime=24.*uCollapse-aJetDelay;
      float gather=smoothstep(0.,.25,launchTime);
      float flightTime=max(0.,launchTime-.25);
+     if(launchTime>=.25)pulse=0.;
      float jetProgress=(1.-exp(-.2*min(flightTime,12.)))/(1.-exp(-2.4));
      float jetSide=delta.y<0.?-1.:1.;
      if(abs(delta.y)<.15*uGridStep)jetSide=aSeed<.5?-1.:1.;
@@ -135,18 +130,23 @@ void main(){
      float insideTime=max(0.,(uCollapse-entryProgress)*24.);
      float currentRadius=insideTime>0.?coreRadius*exp(-2.5*insideTime):freeRadius;
      float contraction=clamp(1.-currentRadius/initialRadius,0.,1.);
-     // Each point first contracts along its original ray, then smoothly starts twisting inside one-third radius.
-     float spin=smoothstep(2./3.,1.,contraction);
-     float angle=spin*(uCollapse*uCollapse*(90.+250.*(1.-clamp(initialRadius/maxRadius,0.,1.)))+48.*contraction);
+     float angle=uCollapse*uCollapse*(90.+250.*(1.-clamp(initialRadius/maxRadius,0.,1.)))+48.*contraction;
      float cs=cos(angle),sn=sin(angle);
      vec3 direction=delta/initialRadius;
-     direction.y*=mix(1.,.12,spin);
+     direction.y*=mix(1.,.12,smoothstep(0.,.9,contraction));
      direction=normalize(direction);
      direction=vec3(cs*direction.x-sn*direction.z,direction.y,sn*direction.x+cs*direction.z);
      renderedPosition=uInfluenceCenter+direction*currentRadius;
      vCollapseFade=1.-smoothstep(0.,1.2,insideTime);
      collapseSize=mix(1.,.35,smoothstep(0.,1.2,insideTime));
    }
+ }
+ // Layer the brief pulse after the vortex so overlap cannot reclassify core points as incoming particles.
+ if(pulse>0.){
+   vec3 localDelta=renderedPosition-uInfluenceCenter;
+   float localRadius=length(localDelta)/uGridStep;
+   float localPush=.6*min(localRadius,5.5)*(1.-smoothstep(5.5,12.,localRadius))*pulse;
+   renderedPosition+=localDelta/max(localRadius,.001)*localPush;
  }
  float growth=smoothstep(0.,1.,uGrowth);
  if(uGrowth<1.){renderedPosition=mix(uInfluenceCenter,renderedPosition,growth);vCollapseFade*=smoothstep(0.,.3,uGrowth);}
