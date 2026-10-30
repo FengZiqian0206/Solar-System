@@ -1,9 +1,6 @@
-# Solar System Touring Guide (Visualization of the orbital data of each planet in the solar system)
+# Solar System Touring Guide
 
 Direct access to run: https://fengziqian0206.github.io/Solar-System/
-
-Data source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
-
 
 <img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
 
@@ -17,7 +14,7 @@ You can :
 4. Click "follow" behind different planets to follow the planetary perspective.
 5. Switch the data visualization chart.
 
-Information details：
+Information details：Data source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
 
 SEMI-MAJOR AXIS (AU)	PERIOD (DAYS)	PERIOD (EARTH YEARS)	MEAN SPEED (km/s)	MEAN RADIUS (km)
 
