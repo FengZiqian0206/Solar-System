@@ -2,11 +2,11 @@
 
 Direct access to run: https://fengziqian0206.github.io/Solar-System/
 
-How to play: 
+How to play :
 
 "WASD" to move; "Space" to trigger events; "Double-click" to enter the game mode; "ESC" to exit
 
-Project Introduction
+Project Introduction :
 
 This project is an interactive experience built on my original solar system visualisation. Instead of simply showing planetary data and information, I wanted users to enter the point-cloud universe and explore it through interaction.
 
@@ -36,8 +36,6 @@ The main idea is to let players explore, experiment and see how their actions ca
 
 Assignment 2（Previous content）：
 
-<img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
-
 This is the motion simulation of the eight planets in the solar system : Based on the real revolution period, eccentricity and Kepler equation of the eight planets.
 I want to build a miniature three-dimensional solar system in the form of a whole system lattice. The color depth and size of the lattice represent the known tangible objects in space, and these information change with time.
 
@@ -47,6 +45,8 @@ You can :
 3. Change the number of point clouds or change the time rate.
 4. Click "follow" behind different planets to follow the planetary perspective.
 5. Switch the data visualization chart.
+
+<img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
 
 Information details：Data source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
 
