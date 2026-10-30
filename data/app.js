@@ -1,7 +1,7 @@
 import { THREE, context } from './renderer-support.js?v=visual-balance-1';
 import { initPlanetCharts } from './planet-charts.js?v=planet-spectrum-1';
-import { createRoaming } from './roaming.js?v=grid-roam-18';
-import { createPointInfluence } from './point-influence.js?v=6';
+import { createRoaming } from './roaming.js?v=grid-roam-20';
+import { createPointInfluence } from './point-influence.js?v=7';
 
 const PLANETS = [
   ['水星','Mercury',.3871,87.969,.2056,47.36,2439.7,.15,7.005,1.50,.58,.37],
@@ -17,13 +17,13 @@ const SPEEDS=[10,30,100,365.256,1000];
 const VISUAL_HALF=26, BODY_HALF=24.5, ORBIT_SCALE=1.10;
 const $=s=>document.querySelector(s);
 const viewport=$('#viewport'), canvas=$('#canvas'), labels=$('#labels'), leaders=$('#leaders');
-const gridSize=50;
+let gridSize=50;
 let renderer,scene,camera,cloud,geometry,material,simDays=0,daysPerSecond=10,paused=false,last=performance.now(),yaw=Math.PI/4,pitch=Math.PI/4,zoom=1,drag=null,followPlanet=-1;
 const bodies=[];
 const focusOffset=new THREE.Vector3();
 let detailCloud,detailGeometry;
 let roaming, pointInfluence;
-const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=BODY_STEP_50/2, BODY_STEP_150=BODY_STEP_50/3, DETAIL_CAPACITY=16000;
+const BODY_STEP_50=2*VISUAL_HALF/49, BODY_STEP_100=2*VISUAL_HALF/99, BODY_STEP_150=2*VISUAL_HALF/149, DETAIL_CAPACITY=16000;
 
 // Pack dense-mode bodies into adjacent fine-grid cells; every position stays on the global lattice.
 function updateBodyDetails(){
@@ -84,12 +84,12 @@ function bodyData(){
 }
 
 const vertexShader=`
-attribute float aSeed,aDetail,aPlayerTint,aJetDelay; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
+attribute float aSeed,aDetail,aPlayerTint,aJetDelay; attribute vec3 aPlayerOffset; uniform float uTime,uHalf,uGridStep,uPixelRatio,uDenseMode,uSpaceScale,uZoom,uBeltBoost,uRoam,uCollapse,uExpansion; uniform vec2 uViewport; uniform vec4 uBodies[9]; uniform vec2 uLevels[9]; uniform vec3 uSaturn,uPlayer,uInfluenceCenter; uniform vec3 uShadowDirs[9]; varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
 float hash(vec3 p){p=fract(p*.1031);p+=dot(p,p.yzx+33.33);return fract((p.x+p.y)*p.z);}
 void main(){
  float visualDense=uDenseMode*(1.-aDetail);
- float compactLayer=uDenseMode*aDetail;
- float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));float beltPoint=0.,beltEnabled=1.-uDenseMode*(1.-aDetail);
+ float compactLayer=uDenseMode*max(aDetail,uRoam);
+ float ratio=.16+hash(position)*.12; float belt=length(position.xz); float beltHash=hash(position*vec3(1.7,2.3,3.1));float beltClump=hash(vec3(floor(position.x*.55),floor(position.z*.55),19.));float beltPoint=0.,beltEnabled=max(uRoam,1.-uDenseMode*(1.-aDetail));
  float beltShift=visualDense*(beltHash-.5)*uHalf*.012;float beltInner=uHalf*mix(.455,.265,compactLayer);float beltOuter=uHalf*mix(.515,.320,compactLayer);float beltHeight=max(1.,uHalf*mix(.10,.035+beltClump*.020,visualDense));float beltChance=mix(.48,.30+beltClump*.12,visualDense)+uBeltBoost*(.32+beltClump*.12);
  if(beltEnabled>.5&&belt>=beltInner&&belt<=beltOuter&&abs(position.y)<=beltHeight&&beltHash<beltChance){ratio=max(ratio,mix(.46+beltHash*.17,.44+beltHash*.17,visualDense));beltPoint=1.;}
  float bodyDepth=0.,shadow=0.;for(int i=0;i<9;i++){vec3 d=position-uBodies[i].xyz;float dist=length(d);if(dist<uBodies[i].w){float inward=1.-dist/uBodies[i].w;bodyDepth=max(bodyDepth,inward);ratio=max(ratio,uLevels[i].y+(uLevels[i].x-uLevels[i].y)*pow(inward,.72));}if(i>0){vec3 shadowDir=uShadowDirs[i];float behind=dot(d,shadowDir);if(behind>0.){vec3 radial=d-shadowDir*behind;float shadowRadius=uBodies[i].w*(2.40+behind/uHalf*.60)+.12;float softness=1.-smoothstep(shadowRadius*shadowRadius*.50,shadowRadius*shadowRadius,dot(radial,radial));float distanceFade=1.-smoothstep(uHalf*.18,uHalf*1.15,behind);shadow=max(shadow,softness*distanceFade);}}}
@@ -103,10 +103,11 @@ void main(){
  float playerDistance=distance(position,uPlayer);
  vPlayer=uRoam*(1.-step(.01,playerDistance));
  vec3 renderedPosition=position+uRoam*(1.-vPlayer)*aPlayerOffset;
+ if(uExpansion>0.)renderedPosition=uInfluenceCenter+(renderedPosition-uInfluenceCenter)*(1.+.12*uExpansion);
  float collapseSize=1.;vCollapseFade=1.;
  if(uCollapse>0.){
    vec3 delta=renderedPosition-uInfluenceCenter;
-   float initialRadius=length(delta),coreRadius=2.1*(2.*uHalf/49.);
+   float initialRadius=length(delta),coreRadius=2.1*uGridStep;
    if(initialRadius<=coreRadius){
      // Gather and launch one point at a time along the common vertical nozzle.
      float launchTime=24.*uCollapse-aJetDelay;
@@ -114,14 +115,14 @@ void main(){
      float flightTime=max(0.,launchTime-.25);
      float jetProgress=(1.-exp(-.2*min(flightTime,12.)))/(1.-exp(-2.4));
      float jetSide=delta.y<0.?-1.:1.;
-     if(abs(delta.y)<.15*(2.*uHalf/49.))jetSide=aSeed<.5?-1.:1.;
+     if(abs(delta.y)<.15*uGridStep)jetSide=aSeed<.5?-1.:1.;
      float jetDistance=(12.+4.*aSeed)*jetProgress;
      renderedPosition=uInfluenceCenter+delta*(1.-gather)+vec3(0.,jetSide*jetDistance,0.);
      float jetFade=smoothstep(1.,4.,flightTime);
      vCollapseFade=1.-jetFade;
      collapseSize=mix(1.,.7,jetFade);
    }else{
-     float maxRadius=length(vec3(uHalf)+abs(uInfluenceCenter))+1.8*(2.*uHalf/49.);
+     float maxRadius=length(vec3(uHalf)+abs(uInfluenceCenter))+1.8*uGridStep;
      float sweepRadius=maxRadius*(24./22.);
      float freeRadius=sqrt(max(0.,initialRadius*initialRadius-pow(sweepRadius*uCollapse,2.)));
      float entryProgress=sqrt(initialRadius*initialRadius-coreRadius*coreRadius)/sweepRadius;
@@ -141,21 +142,21 @@ void main(){
  }
  vRatio=clamp(ratio,0.,1.);vSeed=aSeed;vec4 mv=modelViewMatrix*vec4(renderedPosition,1.);gl_Position=projectionMatrix*mv;float sizeTone=smoothstep(.38,1.,vRatio);float redBoost=smoothstep(.78,1.,vRatio);float radius=(.38+pow(sizeTone,2.4)*10.6)*(1.+redBoost*.18);float zoomFill=pow(max(uZoom,1.),.47);if(vRatio<=.281){float spaceZoom=1.+(sqrt(max(uZoom,1.))-1.)*.12;radius*=mix(1.55,1.00,visualDense)*uSpaceScale*spaceZoom;}if(beltPoint>.5)radius*=mix(1.55,1.32,visualDense)*(1.+uBeltBoost*(-.12+aSeed*.12));float yellowBand=smoothstep(.42,.54,vRatio)*(1.-smoothstep(.69,.79,vRatio));float denseColorScale=1.-yellowBand*.22+redBoost*.32;radius*=mix(1.,denseColorScale,visualDense);float depth=max(1.,-mv.z);vPerspective=clamp(78./depth,.68,1.32);float perspectiveScale=(340./78.)*pow(78./depth,1.22);gl_PointSize=clamp(radius*sizeFactor*uPixelRatio*perspectiveScale*zoomFill,.35,mix(17.,34.,visualDense)*zoomFill);
  // Keep overview's perspective/zoom sizing; only bound extreme close-up sizes.
- if(uRoam>.5)gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio,(bodyDepth>0.?48.:14.)*uPixelRatio);
+ if(uRoam>.5){float roamScale=ratio<=.281?uSpaceScale:1.;gl_PointSize=clamp(gl_PointSize,2.4*uPixelRatio*roamScale,(bodyDepth>0.?48.:14.)*uPixelRatio*roamScale);}
  // Per-cell temporal influence: quick colour arrival, deliberately slower departure.
  vPlayerTint=uRoam*aPlayerTint;
- float clusterDistance=distance(position,uInfluenceCenter)/(2.*uHalf/49.);
+ float clusterDistance=distance(position,uInfluenceCenter)/uGridStep;
  float clusterProfile=1.-smoothstep(0.,2.1,clusterDistance);
  float clusterBlend=uRoam*smoothstep(0.,.02,aPlayerTint)*(1.-smoothstep(2.02,2.1,clusterDistance));
  gl_PointSize=mix(gl_PointSize,(4.+14.*clusterProfile)*uPixelRatio,clusterBlend);
  gl_PointSize*=collapseSize;
  // Dense modes replace body/ring points with a compact adjacent-grid celestial layer.
- vVisible=1.;if(uDenseMode>.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
+ vVisible=1.;if(uDenseMode>.5&&uRoam<.5){if(aDetail<.5&&(bodyDepth>0.||ringPoint>.5))vVisible=0.;if(aDetail>.5&&bodyDepth<=0.&&ringPoint<=.5&&beltPoint<=.5)vVisible=0.;}vBodyDepth=0.;vShadow=(bodyDepth<=0.&&beltPoint<.5&&ringPoint<.5)?shadow:0.;vEmphasis=emphasis;
 }`;
 const fragmentShader=`
-precision highp float;uniform float uTime;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
+precision highp float;uniform float uTime,uSpaceScale;varying float vRatio,vSeed,vPerspective,vVisible,vBodyDepth,vShadow,vEmphasis,vPlayer,vPlayerTint,vCollapseFade;
 vec3 palette(float t){vec3 c[11];c[0]=vec3(.192,.212,.584);c[1]=vec3(.271,.459,.706);c[2]=vec3(.455,.678,.82);c[3]=vec3(.671,.851,.914);c[4]=vec3(.878,.953,.973);c[5]=vec3(1.,1.,.749);c[6]=vec3(.996,.878,.565);c[7]=vec3(.992,.682,.38);c[8]=vec3(.957,.427,.263);c[9]=vec3(.843,.188,.153);c[10]=vec3(.647,0.,.149);int i=int(min(10.,floor(t*11.)));if(i==0)return c[0];if(i==1)return c[1];if(i==2)return c[2];if(i==3)return c[3];if(i==4)return c[4];if(i==5)return c[5];if(i==6)return c[6];if(i==7)return c[7];if(i==8)return c[8];if(i==9)return c[9];return c[10];}
-void main(){if(vVisible<.5)discard;float collapseFade=vCollapseFade;if(collapseFade<=0.)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);vec3 playerColor=.55+.45*cos(6.28318*(uTime/4.+vec3(0.,.333,.667)));if(vPlayer>.5){gl_FragColor=vec4(playerColor,.7*edge*collapseFade);return;}float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;alpha=min(1.,alpha*(1.+vEmphasis*.48));alpha*=1.-vShadow*.99;if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);alpha=max(alpha,.55*vPlayerTint*edge);gl_FragColor=vec4(mix(palette(vRatio),playerColor,vPlayerTint),alpha*collapseFade);}`;
+void main(){if(vVisible<.5)discard;float collapseFade=vCollapseFade;if(collapseFade<=0.)discard;float d=length(gl_PointCoord-.5);if(d>.5)discard;float edge=1.-smoothstep(.43,.5,d);vec3 playerColor=.55+.45*cos(6.28318*(uTime/4.+vec3(0.,.333,.667)));if(vPlayer>.5){gl_FragColor=vec4(playerColor,.7*edge*collapseFade);return;}float opacityVariation=.72+vSeed*.28;float depthFade=mix(.78,1.18,clamp((vPerspective-.68)/.64,0.,1.));float redOpacity=1.+smoothstep(.78,1.,vRatio)*.22;float alpha=min(1.,(.05+pow(vRatio,2.85)*.95)*opacityVariation*depthFade*redOpacity*1.08)*edge;alpha=min(1.,alpha*(1.+vEmphasis*.48));alpha*=1.-vShadow*.99;if(vRatio<=.281)alpha*=sqrt(uSpaceScale);if(vBodyDepth>0.)alpha=max(alpha,(.30+.70*pow(vBodyDepth,.78))*edge);alpha=max(alpha,.55*vPlayerTint*edge);gl_FragColor=vec4(mix(palette(vRatio),playerColor,vPlayerTint),alpha*collapseFade);}`;
 
 function rebuild(){
   if(detailGeometry){detailGeometry.dispose();detailGeometry=null;detailCloud=null;}
@@ -163,17 +164,20 @@ function rebuild(){
   const n=gridSize,count=n*n*n,half=VISUAL_HALF,step=n===150?BODY_STEP_150:n===100?BODY_STEP_100:BODY_STEP_50,pos=new Float32Array(count*3),seed=new Float32Array(count);let q=0;
   for(let x=0;x<n;x++)for(let y=0;y<n;y++)for(let z=0;z<n;z++){pos[q*3]=x*step-half;pos[q*3+1]=y*step-half;pos[q*3+2]=z*step-half;seed[q]=((x*73856093^y*19349663^z*83492791)>>>0)%10000/10000;q++}
   geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(pos,3));geometry.setAttribute('aSeed',new THREE.BufferAttribute(seed,1));
-  pointInfluence=createPointInfluence(n,half);
+  pointInfluence=createPointInfluence(n,half,step);
   geometry.setAttribute('aPlayerTint',new THREE.BufferAttribute(pointInfluence.values,1).setUsage(THREE.DynamicDrawUsage));
   geometry.setAttribute('aPlayerOffset',new THREE.BufferAttribute(pointInfluence.offsets,3).setUsage(THREE.DynamicDrawUsage));
   geometry.setAttribute('aJetDelay',new THREE.BufferAttribute(new Float32Array(count),1).setUsage(THREE.DynamicDrawUsage));
   geometry.computeBoundingSphere();geometry.boundingSphere.radius+=step*1.8;
   material=new THREE.ShaderMaterial({vertexShader,fragmentShader,transparent:true,depthWrite:false,blending:THREE.NormalBlending,uniforms:{uTime:{value:0},uHalf:{value:half},uPixelRatio:{value:Math.min(devicePixelRatio,2)},uDenseMode:{value:gridSize>50?1:0},uSpaceScale:{value:1},uBeltBoost:{value:gridSize===150?1:0},uZoom:{value:zoom},uViewport:{value:new THREE.Vector2()},uBodies:{value:Array.from({length:9},()=>new THREE.Vector4())},uLevels:{value:Array.from({length:9},()=>new THREE.Vector2())},uSaturn:{value:new THREE.Vector3()},uShadowDirs:{value:Array.from({length:9},()=>new THREE.Vector3())}}});
   material.defaultAttributeValues.aDetail=[0];
+  material.defaultAttributeValues.aPlayerTint=[0];
   material.defaultAttributeValues.aPlayerOffset=[0,0,0];
   material.defaultAttributeValues.aJetDelay=[0];
   material.uniforms.uRoam={value:0};
   material.uniforms.uCollapse={value:0};
+  material.uniforms.uExpansion={value:0};
+  material.uniforms.uGridStep={value:step};
   material.uniforms.uPlayer={value:new THREE.Vector3()};
   material.uniforms.uInfluenceCenter={value:new THREE.Vector3()};
   cloud=new THREE.Points(geometry,material);scene.add(cloud);
@@ -184,10 +188,11 @@ function rebuild(){
     detailGeometry.setAttribute('aDetail',new THREE.BufferAttribute(new Float32Array(DETAIL_CAPACITY).fill(1),1));
     detailCloud=new THREE.Points(detailGeometry,material);detailCloud.frustumCulled=false;cloud.add(detailCloud);
   }
+  roaming?.setGrid(step);
   updateBodies();if(followPlanet>=0)zoom=followFitZoom();$('#pointCount').textContent=count.toLocaleString();
 }
 function prepareJets(){
-  const center=roaming.influencePosition,player=roaming.position,step=BODY_STEP_50,reach=4*step,radius=2.1*step;
+  const center=roaming.influencePosition,player=roaming.position,step=material.uniforms.uGridStep.value,reach=4*step,radius=2.1*step;
   const positions=geometry.attributes.position.array,offsets=pointInfluence.offsets,cells=[];
   const lo=axis=>Math.max(0,Math.ceil((center[axis]-reach+VISUAL_HALF)/step));
   const hi=axis=>Math.min(gridSize-1,Math.floor((center[axis]+reach+VISUAL_HALF)/step));
@@ -220,10 +225,13 @@ function frame(now){
   const elapsed=Math.max(0,(now-last)/1000),dt=Math.min(elapsed,.1);last=now;if(!paused && !roaming.collapsing){simDays+=dt*daysPerSecond;updateBodies()}
   material.uniforms.uTime.value=now/1000;
   material.uniforms.uZoom.value=Math.max(1,roaming.active?roaming.zoom:zoom);
+  material.uniforms.uSpaceScale.value=roaming.active?(50/gridSize)**1.5:1;
   material.uniforms.uRoam.value=roaming.active?1:0;
   if(roaming.active){cloud.rotation.set(0,0,0);cloud.position.set(0,0,0);roaming.update(dt,elapsed);material.uniforms.uPlayer.value.copy(roaming.position);material.uniforms.uInfluenceCenter.value.copy(roaming.influencePosition);if(!roaming.collapsing && pointInfluence.update(roaming.influencePosition,dt)){geometry.attributes.aPlayerTint.needsUpdate=true;geometry.attributes.aPlayerOffset.needsUpdate=true}}
   else {cloud.rotation.set(pitch,yaw,0);const focus=bodies[followPlanet>=0?followPlanet+1:0];focusOffset.copy(focus.pos).applyEuler(cloud.rotation).multiplyScalar(-1);cloud.position.copy(focusOffset);camera.position.set(0,0,78);camera.zoom=zoom}
   material.uniforms.uCollapse.value=roaming.active?roaming.collapseProgress:0;
+  material.uniforms.uExpansion.value=roaming.active?roaming.expansion:0;
+  if(detailCloud)detailCloud.visible=!roaming.active;
   // The original lattice bounds no longer describe the rotating cloud during collapse.
   cloud.frustumCulled=!roaming.collapsing;
   camera.updateProjectionMatrix();renderer.render(scene,camera);if(!roaming.active)updateLabels();
@@ -236,6 +244,12 @@ function updateLabels(){
 }
 function setView(y,p,z){yaw=y;pitch=p;zoom=z??(followPlanet>=0?followFitZoom():1)}
 viewport.addEventListener('pointerdown',e=>{if(roaming?.active)return;drag={x:e.clientX,y:e.clientY};viewport.setPointerCapture(e.pointerId)});viewport.addEventListener('pointermove',e=>{if(roaming?.active||!drag)return;yaw+=(e.clientX-drag.x)*.002;pitch=Math.max(-Math.PI/2,Math.min(Math.PI/2,pitch+(e.clientY-drag.y)*.002));drag={x:e.clientX,y:e.clientY}});viewport.addEventListener('pointerup',()=>drag=null);viewport.addEventListener('pointercancel',()=>drag=null);viewport.addEventListener('lostpointercapture',()=>drag=null);window.addEventListener('blur',()=>drag=null);viewport.addEventListener('wheel',e=>{e.preventDefault();if(roaming?.active){roaming.wheel(e.deltaY);return}const maxZoom=followPlanet>=0?90:10;zoom=Math.max(.52,Math.min(maxZoom,zoom*(e.deltaY<0?1.1:.9)))},{passive:false});
+$('#density').addEventListener('input',event=>{
+  const requested=Number(event.target.value);
+  if(roaming.active||![50,100,150].includes(requested)){event.target.value=gridSize;return;}
+  if(requested===gridSize)return;
+  gridSize=requested;$('#densityValue').textContent=`${gridSize} × ${gridSize} × ${gridSize}`;rebuild();
+});
 $('#speed').addEventListener('input',e=>{daysPerSecond=SPEEDS[+e.target.value];$('#speedValue').textContent=`${daysPerSecond} 天/秒 · DAYS/S`});const pauseButton=$('#pause'),pauseLabel=$('#pauseLabel');pauseButton.onclick=()=>{paused=!paused;pauseButton.classList.toggle('is-paused',paused);pauseLabel.textContent=paused?'继续公转 · RESUME ORBITS':'暂停公转 · PAUSE ORBITS';$('#status').textContent=paused?'● 已暂停 · PAUSED':'● 运行中 · RUNNING'};$('#resetView').onclick=()=>setView(Math.PI/4,Math.PI/4);$('#frontView').onclick=()=>setView(0,0);$('#topView').onclick=()=>setView(0,Math.PI/2);$('#resetPlanets').onclick=()=>{simDays=0;updateBodies()};
 $('#fullscreen').onclick=async()=>{if(!document.fullscreenElement)await $('#hologram').requestFullscreen();else await document.exitFullscreen()};document.addEventListener('fullscreenchange',()=>$('#fullscreen').classList.toggle('exit',!!document.fullscreenElement));
 function rows(filter=''){const f=filter.trim().toLowerCase();$('#planetRows').innerHTML=PLANETS.map((p,index)=>({p,index})).filter(({p})=>!f||p[0].includes(f)||p[1].toLowerCase().includes(f)).map(({p,index})=>{const active=followPlanet===index;return `<tr class="${active?'is-following':''}"><td><div class="planet-cell"><span>${p[0]}&nbsp;&nbsp;${p[1]}</span><button class="follow-button" data-follow="${index}" aria-pressed="${active}">${active?'跟随中 · ACTIVE':'跟随 · FOLLOW'}</button></div></td><td>${p[2].toFixed(4)}</td><td>${p[3].toLocaleString(undefined,{maximumFractionDigits:3})}</td><td>${(p[3]/365.256).toFixed(3)}</td><td>${p[5].toFixed(2)}</td><td>${p[6].toLocaleString()}</td></tr>`}).join('')}rows();$('#planetRows').addEventListener('click',e=>{const button=e.target.closest('.follow-button');if(button)setFollow(+button.dataset.follow)});$('#search').addEventListener('input',e=>rows(e.target.value));new ResizeObserver(resize).observe(viewport);

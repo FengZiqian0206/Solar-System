@@ -58,11 +58,9 @@ const { chromium } = require('playwright');
     const exitedTime=await page.evaluate(()=>window.qaAutoEntry.time);
     await page.waitForFunction(t=>performance.now()/1000>t+.5,exitedTime);
     assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),false,'Exit stays in overview until the next manual entry');
-    assert.equal(await page.locator('#density').isDisabled(), true);
+    assert.equal(await page.locator('#density').isDisabled(), false,'Overview density can be changed');
     assert.equal(await page.locator('#density').inputValue(), '50');
     assert.equal(await page.locator('#pointCount').textContent(), '125,000');
-    // Even an old/programmatically dispatched change cannot rebuild higher density.
-    await page.locator('#density').evaluate(el=>{el.value='150';el.dispatchEvent(new Event('input'));el.dispatchEvent(new Event('change'));el.value='50';});
     assert.equal(await page.locator('#densityValue').textContent(), '50 × 50 × 50');
     assert.equal(await page.locator('#pointCount').textContent(), '125,000');
     await page.locator('#pause').click();
@@ -271,6 +269,7 @@ const { chromium } = require('playwright');
     await page.waitForFunction(() => window.cameraSample && window.roamSample?.active);
     const entry=await page.evaluate(()=>window.roamSample);
     assert.equal(entry.matches,true); assert.equal(entry.count,125000); assert.equal(entry.calls,1); assert.equal(entry.points,125000);
+    assert.equal(await page.locator('#density').isDisabled(),true,'Active roaming locks density');
     assert.ok(entry.player.every((v,i)=>Math.abs(v-entry.earth[i])<=52/49/2+.001));
     const entryCamera=await page.evaluate(()=>window.cameraSample);
     const entryDistance=Math.hypot(...entryCamera.map((v,i)=>v-entry.player[i]));
@@ -377,7 +376,7 @@ const { chromium } = require('playwright');
       viewport.requestPointerLock=()=>{window.qaLockAttempts++;return Promise.reject(new Error('QA denial'));};
     });
     for (let attempt=0;attempt<2;attempt++) {
-      assert.equal(await page.locator('#density').isDisabled(), true);
+      assert.equal(await page.locator('#density').isDisabled(), false);
       assert.equal(await page.locator('#pointCount').textContent(), '125,000');
       await page.locator('h1').dblclick();
       await page.waitForFunction(() => document.body.classList.contains('is-roaming'));
@@ -435,6 +434,6 @@ const { chromium } = require('playwright');
     await page.locator('#chartToggle').click();
     assert.equal(await page.locator('#planetCharts svg').count(), 1);
     assert.deepEqual(errors, []); assert.deepEqual(failed, []);
-    console.log(JSON.stringify({passed:true,densities:[50],checks:['automatic entry after splash without gesture','first interaction upgrades native fullscreen and pointer lock','exit stays in overview / manual re-entry','fixed density','16px animated neutral gradient cursor','synchronized hint and leader / four-corner bounds / gesture passthrough','70% opacity and 4-second gameplay colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','48-unit camera distance','Earth spawn without following','6-unit W forward / composed keyboard and button hold','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],entryDistance,movementSpeed:speed,cursorVisual,cursorCorners,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
+    console.log(JSON.stringify({passed:true,densities:[50],checks:['automatic entry after splash without gesture','first interaction upgrades native fullscreen and pointer lock','exit stays in overview / manual re-entry','density enabled in overview and locked while roaming','16px animated neutral gradient cursor','synchronized hint and leader / four-corner bounds / gesture passthrough','70% opacity and 4-second gameplay colour cycle','neighbor tint / unchanged distant points','continuous radial point sizes / no singular large centre','5-second fade','fullscreen and real pointer lock','pole crossing and continued yaw/pitch','unlocked edge turn and click retry','labels hidden','horizontal reversed / vertical unchanged','wheel','48-unit camera distance','Earth spawn without following','6-unit W forward / composed keyboard and button hold','selected point grid alignment','bounded off-grid repulsion','symmetric shader displacement / unchanged overview and selected centre','boundary clamp','unchanged base geometry','keyup and blur stop','Escape','exit button','permission failures and lock cleanup','chart regression'],entryDistance,movementSpeed:speed,cursorVisual,cursorCorners,tintPixels,radialSizes,repulsionPixels,repulsion,render:{calls:entry.calls,points:entry.points},screenshots:output}));
   } finally { await browser.close(); }
 })().catch(error=>{console.error(error);process.exitCode=1;});

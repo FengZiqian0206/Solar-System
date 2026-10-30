@@ -20,21 +20,22 @@ const {chromium}=require('playwright');
       document.addEventListener('DOMContentLoaded',async()=>{
         const {THREE}=await import(new URL('./renderer-support.js?v=visual-balance-1',location.href).href);
         const afterRender=THREE.Points.prototype.onAfterRender;
-        window.qaVortexHistory=[];window.qaFrozen=null;
+        window.qaVortexHistory=[];window.qaExpansionFrames=[];window.qaFrozen=null;
         document.addEventListener('keydown',event=>{if(event.code==='Space'&&!event.repeat&&window.qaVortex?.active&&window.qaVortex.progress===0)window.qaTriggerWall=performance.now();},true);
         THREE.Points.prototype.onAfterRender=function(renderer,scene,camera,...args){
           afterRender.call(this,renderer,scene,camera,...args);
           if(!this.material?.uniforms?.uCollapse||this.geometry.attributes.position.count!==125000)return;
           const u=this.material.uniforms;
           window.qaCloud=this;window.qaRenderer=renderer;window.qaScene=scene;window.qaCamera=camera;
-          window.qaVortex={active:u.uRoam.value,progress:u.uCollapse.value,time:u.uTime.value,wall:performance.now(),travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),bodies:u.uBodies.value.flatMap(body=>body.toArray()),calls:renderer.info.render.calls,points:renderer.info.render.points,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,dpr:renderer.getPixelRatio()};
+          window.qaVortex={active:u.uRoam.value,progress:u.uCollapse.value,expansion:u.uExpansion.value,time:u.uTime.value,wall:performance.now(),travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray(),camera:camera.position.toArray(),quaternion:camera.quaternion.toArray(),bodies:u.uBodies.value.flatMap(body=>body.toArray()),calls:renderer.info.render.calls,points:renderer.info.render.points,geometries:renderer.info.memory.geometries,textures:renderer.info.memory.textures,dpr:renderer.getPixelRatio()};
+          if(u.uRoam.value&&u.uExpansion.value>0)window.qaExpansionFrames.push({expansion:u.uExpansion.value,progress:u.uCollapse.value});
           if(u.uRoam.value&&u.uCollapse.value>0){
             if(!window.qaFrozen){
               const attributes=this.geometry.attributes,base=attributes.position.array,offset=attributes.aPlayerOffset.array,delay=attributes.aJetDelay.array,coreSchedule=[];
               for(let index=0;index<attributes.position.count;index++){
                 const q=index*3,pinned=Math.hypot(base[q]-u.uPlayer.value.x,base[q+1]-u.uPlayer.value.y,base[q+2]-u.uPlayer.value.z)<.01;
                 const distance=Math.hypot(base[q]+(pinned?0:offset[q])-u.uInfluenceCenter.value.x,base[q+1]+(pinned?0:offset[q+1])-u.uInfluenceCenter.value.y,base[q+2]+(pinned?0:offset[q+2])-u.uInfluenceCenter.value.z);
-                if(distance<=2.1*2*u.uHalf.value/49)coreSchedule.push({index,distance,delay:delay[index]});
+                if(distance<=2.1*u.uGridStep.value)coreSchedule.push({index,distance,delay:delay[index]});
               }
               coreSchedule.sort((a,b)=>a.distance-b.distance||a.index-b.index);
               window.qaFrozen={bodies:window.qaVortex.bodies.slice(),travel:window.qaVortex.travel.slice(),tint:attributes.aPlayerTint.array.slice(),offset:offset.slice(),jetDelay:delay.slice(),coreSchedule};
@@ -73,7 +74,7 @@ const {chromium}=require('playwright');
       const {THREE}=await import('./renderer-support.js?v=visual-balance-1');
       const renderer=window.qaRenderer,material=window.qaCloud.material.clone();
       material.blending=THREE.NoBlending;material.defaultAttributeValues.aDetail=[0];material.defaultAttributeValues.aPlayerOffset=[0,0,0];
-      material.uniforms.uTime.value=0;material.uniforms.uRoam.value=1;material.uniforms.uInfluenceCenter.value.set(0,12,0);material.uniforms.uPlayer.value.set(0,12,0);
+      material.uniforms.uTime.value=0;material.uniforms.uRoam.value=1;material.uniforms.uExpansion.value=0;material.uniforms.uInfluenceCenter.value.set(0,12,0);material.uniforms.uPlayer.value.set(0,12,0);
       const geometry=new THREE.BufferGeometry();
       geometry.setAttribute('position',new THREE.Float32BufferAttribute([16,12,0],3));
       geometry.setAttribute('aSeed',new THREE.Float32BufferAttribute([.5],1));
@@ -82,8 +83,8 @@ const {chromium}=require('playwright');
       const scene=new THREE.Scene(),point=new THREE.Points(geometry,material);point.frustumCulled=false;scene.add(point);
       const camera=new THREE.OrthographicCamera(-64,64,64,-64,.1,400),target=new THREE.WebGLRenderTarget(512,512),pixels=new Uint8Array(512*512*4);
       const previous=renderer.getRenderTarget(),clear=renderer.getClearColor(new THREE.Color()),clearAlpha=renderer.getClearAlpha();
-      function sample(radius,progress,top=false,delay=0){
-        material.uniforms.uCollapse.value=progress;
+      function sample(radius,progress,top=false,delay=0,expansion=0){
+        material.uniforms.uCollapse.value=progress;material.uniforms.uExpansion.value=expansion;
         geometry.attributes.aJetDelay.setX(0,delay);geometry.attributes.aJetDelay.needsUpdate=true;
         const delta=Array.isArray(radius)?radius:[radius,0,0];
         geometry.attributes.position.setXYZ(0,delta[0],12+delta[1],delta[2]);geometry.attributes.position.needsUpdate=true;
@@ -96,14 +97,14 @@ const {chromium}=require('playwright');
         }
         return {weight,maxAlpha,x:weight?(x/weight+.5-256)/4:null,y:weight?(y/weight+.5-256)/4:null};
       }
-      function probe(radius,progress,delay=0){
-        const front=sample(radius,progress,false,delay),top=sample(radius,progress,true,delay);
+      function probe(radius,progress,delay=0,expansion=0){
+        const front=sample(radius,progress,false,delay,expansion),top=sample(radius,progress,true,delay,expansion);
         const position=front.weight&&top.weight?[front.x,front.y,-top.y]:null;
         return {progress,front,top,position,radius:position?Math.hypot(...position):null};
       }
       try{
         const half=material.uniforms.uHalf.value,center=material.uniforms.uInfluenceCenter.value;
-        const coreRadius=2.1*2*half/49,maxRadius=Math.hypot(half+Math.abs(center.x),half+Math.abs(center.y),half+Math.abs(center.z))+1.8*2*half/49,capacity=maxRadius*24/22;
+        const coreRadius=2.1*material.uniforms.uGridStep.value,maxRadius=Math.hypot(half+Math.abs(center.x),half+Math.abs(center.y),half+Math.abs(center.z))+1.8*material.uniforms.uGridStep.value,capacity=maxRadius*24/22;
         const entryProgress=Math.sqrt(16*16-coreRadius*coreRadius)/capacity;
         const rotation=Array.from({length:25},(_,index)=>{
           const point=probe(48,index/100);
@@ -111,7 +112,7 @@ const {chromium}=require('playwright');
         });
         const preparation=.25/24,jetTimes=[0,.00001,.3/24+preparation,.9/24+preparation,2.5/24+preparation,3.1/24+preparation,4/24+preparation];
         const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
-        return {coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
+        return {expansion:{base:probe([8,3,4],0),peak:probe([8,3,4],0,0,1),center:probe(0,0,0,1)},coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
   }
@@ -132,6 +133,14 @@ const {chromium}=require('playwright');
         await window.qaController.enter({automatic:true});
       });
       await page.keyboard.down('Space');
+      const pulse=await page.evaluate(()=>{
+        const controller=window.qaController,samples=[{expansion:controller.expansion,progress:controller.collapseProgress}];
+        for(let index=0;index<4;index++){controller.update(.1,.15);samples.push({expansion:controller.expansion,progress:controller.collapseProgress});}
+        return samples;
+      });
+      assert.ok(pulse.every(sample=>sample.progress===0),'The short expansion precedes the unchanged vortex clock');
+      assert.ok(pulse[0].expansion===0&&pulse[4].expansion===0&&Math.abs(pulse[2].expansion-1)<1e-8,'Expansion returns to its original radius after its 0.6-second pulse');
+      assert.ok(pulse[1].expansion>0&&pulse[1].expansion<1&&Math.abs(pulse[1].expansion-pulse[3].expansion)<1e-8,'Expansion rises and settles symmetrically');
       await page.evaluate(()=>window.qaController.update(.1,12));
       const rect=await page.locator('#viewport').boundingBox(),point={x:rect.x+rect.width*.5,y:rect.y+rect.height*.4};
       if(mobile)await page.touchscreen.tap(point.x,point.y);else await page.mouse.click(point.x,point.y);
@@ -150,7 +159,7 @@ const {chromium}=require('playwright');
       assert.equal(await page.evaluate(()=>document.fullscreenElement),null);
       assert.equal(await page.evaluate(()=>window.qaController.collapseProgress),0,'Exit resets collapse state');
       assert.deepEqual(errors,[]);
-      return {mode,checks:['in-progress input cannot exit','completion click/tap exits CSS fullscreen','HUD coordinates accepted','same gesture cannot re-enter']};
+      return {mode,pulse,checks:['0.6-second expansion before unchanged 24-second vortex','in-progress input cannot exit','completion click/tap exits CSS fullscreen','HUD coordinates accepted','same gesture cannot re-enter']};
     }finally{await context.close();}
   }
   try{
@@ -160,6 +169,8 @@ const {chromium}=require('playwright');
       assert.ok((await page.locator('#roamCollapseHint').textContent()).includes('看看会发生什么'));
       assert.ok((await page.locator('#roamCollapseHint').textContent()).includes('SEE WHAT HAPPENS'));
       const shader=await shaderSamples(page);
+      assert.ok(Math.abs(shader.expansion.peak.radius/shader.expansion.base.radius-1.12)<.012,'Expansion increases distance from the coloured centre by twelve percent');
+      assert.ok(Math.hypot(...shader.expansion.peak.position.map((value,index)=>value-shader.expansion.base.position[index]*1.12))<.2&&shader.expansion.center.radius<.15,'Expansion remains radial and keeps its centre fixed');
       const nearLoss=shader.near[0].radius-shader.near[1].radius,farLoss=shader.far[0].radius-shader.far[1].radius;
       assert.ok(nearLoss>farLoss*1.8&&nearLoss>farLoss+.15&&farLoss>0,`Initially farther points contract more slowly: near=${nearLoss}, far=${farLoss}`);
       assert.equal(shader.near[2].front.weight,0,'Near points have been absorbed by mid-animation');
@@ -241,11 +252,13 @@ const {chromium}=require('playwright');
       await page.screenshot({path:path.join(output,'desktop-4-complete.png')});
       const completed=await page.evaluate(()=>({state:window.qaVortex,history:window.qaVortexHistory.slice(),elapsed:(window.qaVortexHistory.find(frame=>frame.progress===1).wall-window.qaTriggerWall)/1000,baseIntact:window.qaBasePositions.every((value,index)=>value===window.qaCloud.geometry.attributes.position.array[index]),frozenTint:window.qaFrozen.tint.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerTint.array[index]),frozenOffsets:window.qaFrozen.offset.every((value,index)=>value===window.qaCloud.geometry.attributes.aPlayerOffset.array[index]),frozenJetDelay:window.qaFrozen.jetDelay.every((value,index)=>value===window.qaCloud.geometry.attributes.aJetDelay.array[index]),frozenBodies:window.qaFrozen.bodies.every((value,index)=>value===window.qaVortex.bodies[index])}));
       assert.ok(completed.history.length>10);
-      assert.ok(completed.elapsed>=22&&completed.elapsed<=29,'Staggered vortex completes in about twenty-four real seconds');
+      assert.ok(completed.elapsed>=22.5&&completed.elapsed<=30,'Expansion plus the original vortex completes in about 24.6 real seconds');
       assert.ok(completed.history.every((frame,index,frames)=>frame.progress>=0&&frame.progress<=1&&(index===0||frame.progress>=frames[index-1].progress)),'Progress stays bounded and never restarts');
       assert.equal(completed.baseIntact,true);assert.equal(completed.frozenTint,true);assert.equal(completed.frozenOffsets,true);assert.equal(completed.frozenJetDelay,true);assert.equal(completed.frozenBodies,true);
       assert.equal(completed.state.calls,1);assert.equal(completed.state.points,125000);
       const completePixels=await scenePixels(page);
+      const expansionFrames=await page.evaluate(()=>window.qaExpansionFrames);
+      assert.ok(expansionFrames.every(frame=>frame.expansion>0&&frame.expansion<=1&&frame.progress===0),'Any rendered expansion frames precede the vortex');
       assert.equal(completePixels.lit,0,'Only the scene, excluding HTML HUD, becomes black');assert.ok(completePixels.maxRGB<=1);
       await page.keyboard.down('Space');
       assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),true,'Held Space repeat does not dismiss completion');
@@ -255,7 +268,7 @@ const {chromium}=require('playwright');
       const exitedAt=await page.evaluate(()=>performance.now());
       await page.waitForFunction(time=>performance.now()>time+550,exitedAt);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,shader,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','twenty-four-second real-time completion','frozen orbits, influence and launch schedule','immutable base coordinates','completed scene black','exit and re-entry reset']};
+      report.desktop={beforePixels,completePixels,shader,expansionFrames,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['short radial expansion before unchanged vortex','strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','one-shot and repeat safety','held Space does not dismiss / fresh Space exits after completion','camera look and wheel during collapse','unpaused jet extension and early/middle/late/final captures','24.6-second real-time completion','frozen orbits, influence and launch schedule','immutable base coordinates','completed scene black','exit and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 
