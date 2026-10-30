@@ -30,12 +30,18 @@ Tester A:
 
 My change: I changed the first-time experience so that players enter full-screen mode directly, with clear on-screen instructions. Players can still exit full-screen mode whenever they want.
 
+<img width="617" height="512" alt="79414bd36271cf6d2a3baa524b5e7f41" src="https://github.com/user-attachments/assets/1242950e-ebe2-4c7e-b7c7-540aaf802eff" />
+
+
 Tester B:
 
 1. The experience sometimes crashed when opening. I also experienced this during testing, but it happened very rarely. (I have not found the exact cause yet.)
 2. The tester suggested adding the A, S and D keys instead of only using W, to make movement smoother. He also suggested using Q and E for vertical movement.
 
 My change: I added A, S and D, but decided not to add Q and E. I wanted to avoid having too many controls, and I think the WASD controls are easier to understand.
+
+<img width="1280" height="644" alt="502b1fd1c293852995784887b8554f1d" src="https://github.com/user-attachments/assets/1ed43151-0949-47db-b7ab-49c32a6a8b01" />
+
 
 - AI Use (From September 27)
 
