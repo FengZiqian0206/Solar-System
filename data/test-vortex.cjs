@@ -112,7 +112,8 @@ const {chromium}=require('playwright');
         });
         const preparation=.25/24,jetTimes=[0,.00001,.3/24+preparation,.9/24+preparation,2.5/24+preparation,3.1/24+preparation,4/24+preparation];
         const jet=source=>jetTimes.map(progress=>{const point=probe(source,progress);return {progress,position:point.position,alpha:point.front.maxAlpha,weight:point.front.weight};});
-        return {expansion:{base:probe([8,3,4],0),peak:probe([8,3,4],0,0,1),center:probe(0,0,0,1)},coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
+        const pulseAt=steps=>{const source=[steps*material.uniforms.uGridStep.value,0,0];return {base:probe(source,0),peak:probe(source,0,0,1),reset:probe(source,0)};};
+        return {expansion:{core:pulseAt(1),ring:pulseAt(4),far:pulseAt(14),center:probe(0,0,0,1)},coreRadius,entryProgress,near:[probe(16,0),probe(16,.08),probe(16,.35)],far:[probe(48,0),probe(48,.08),probe(48,.35),probe(48,1)],entry:[probe(16,entryProgress-.003),probe(16,entryProgress+.025),probe(16,entryProgress+.06)],core:[0,.9/24+preparation,2.5/24+preparation,4/24+preparation,1].map(progress=>({progress,...sample(0,progress)})),jets:{upper:jet([.6,.8,.3]),lower:jet([.6,-.8,.3])},ages:{samples:[0,.9,1,2.5,4].map(age=>({age,...probe([.6,.8,.3],(age+.25)/24)})),sameGlobalDelayed:probe([.6,.8,.3],2.75/24,1.4),sameAgeDelayed:probe([.6,.8,.3],4.15/24,1.4)},sequence:{first:probe([.6,.8,.3],1/24,0),waiting:probe([.6,.8,.3],1/24,1.4),later:probe([.6,.8,.3],2.5/24,1.4)},rotation};
       }finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
     });
   }
@@ -129,18 +130,21 @@ const {chromium}=require('playwright');
         const viewport=document.querySelector('#viewport');
         viewport.requestPointerLock=()=>Promise.reject(new Error('QA component CSS mode'));
         document.querySelector('#hologram').requestFullscreen=()=>Promise.reject(new Error('QA component CSS mode'));
-        window.qaController=createRoaming({THREE,camera:new THREE.PerspectiveCamera(48,1,.1,500),viewport,getEarth:()=>({pos:new THREE.Vector3(2,0,0)}),half:26,step:52/49,onStart(){}});
+        window.qaComponentCamera=new THREE.PerspectiveCamera(48,1,.1,500);
+        window.qaController=createRoaming({THREE,camera:window.qaComponentCamera,viewport,getEarth:()=>({pos:new THREE.Vector3(2,0,0)}),half:26,step:52/49,onStart(){}});
         await window.qaController.enter({automatic:true});
+        window.qaController.update(0,0);
       });
       await page.keyboard.down('Space');
       const pulse=await page.evaluate(()=>{
-        const controller=window.qaController,samples=[{expansion:controller.expansion,progress:controller.collapseProgress}];
-        for(let index=0;index<4;index++){controller.update(.1,.15);samples.push({expansion:controller.expansion,progress:controller.collapseProgress});}
+        const controller=window.qaController,snapshot=()=>({expansion:controller.expansion,progress:controller.collapseProgress,camera:window.qaComponentCamera.position.toArray(),travel:controller.influencePosition.toArray()}),samples=[snapshot()];
+        for(let index=0;index<4;index++){controller.update(.1,.15);samples.push(snapshot());}
         return samples;
       });
       assert.ok(pulse.every(sample=>sample.progress===0),'The short expansion precedes the unchanged vortex clock');
       assert.ok(pulse[0].expansion===0&&pulse[4].expansion===0&&Math.abs(pulse[2].expansion-1)<1e-8,'Expansion returns to its original radius after its 0.6-second pulse');
       assert.ok(pulse[1].expansion>0&&pulse[1].expansion<1&&Math.abs(pulse[1].expansion-pulse[3].expansion)<1e-8,'Expansion rises and settles symmetrically');
+      assert.ok(pulse.every(sample=>sample.camera.every((value,index)=>value===pulse[0].camera[index])&&sample.travel.every((value,index)=>value===pulse[0].travel[index])),'The local pulse changes particles without moving the camera or coloured centre');
       await page.evaluate(()=>window.qaController.update(.1,12));
       const rect=await page.locator('#viewport').boundingBox(),point={x:rect.x+rect.width*.5,y:rect.y+rect.height*.4};
       if(mobile)await page.touchscreen.tap(point.x,point.y);else await page.mouse.click(point.x,point.y);
@@ -169,8 +173,9 @@ const {chromium}=require('playwright');
       assert.ok((await page.locator('#roamCollapseHint').textContent()).includes('看看会发生什么'));
       assert.ok((await page.locator('#roamCollapseHint').textContent()).includes('SEE WHAT HAPPENS'));
       const shader=await shaderSamples(page);
-      assert.ok(Math.abs(shader.expansion.peak.radius/shader.expansion.base.radius-1.12)<.012,'Expansion increases distance from the coloured centre by twelve percent');
-      assert.ok(Math.hypot(...shader.expansion.peak.position.map((value,index)=>value-shader.expansion.base.position[index]*1.12))<.2&&shader.expansion.center.radius<.15,'Expansion remains radial and keeps its centre fixed');
+      for(const sample of [shader.expansion.core,shader.expansion.ring])assert.ok(Math.abs(sample.peak.radius/sample.base.radius-1.6)<.05,'Coloured core and nearby repulsion ring actually expand outward by sixty percent');
+      for(const sample of [shader.expansion.core,shader.expansion.ring,shader.expansion.far])assert.ok(Math.hypot(...sample.reset.position.map((value,index)=>value-sample.base.position[index]))<.05,'Local expansion settles back to the original particle positions');
+      assert.ok(Math.hypot(...shader.expansion.far.peak.position.map((value,index)=>value-shader.expansion.far.base.position[index]))<.05&&shader.expansion.center.radius<.15,'Far particles and the coloured centre remain fixed, rather than mimicking a global camera zoom');
       const nearLoss=shader.near[0].radius-shader.near[1].radius,farLoss=shader.far[0].radius-shader.far[1].radius;
       assert.ok(nearLoss>farLoss*1.8&&nearLoss>farLoss+.15&&farLoss>0,`Initially farther points contract more slowly: near=${nearLoss}, far=${farLoss}`);
       assert.equal(shader.near[2].front.weight,0,'Near points have been absorbed by mid-animation');
@@ -213,6 +218,11 @@ const {chromium}=require('playwright');
       await page.waitForFunction(()=>document.pointerLockElement?.id==='viewport');
       const movingFrom=await page.evaluate(()=>window.qaVortex.travel);
       await page.waitForFunction(p=>Math.hypot(...window.qaVortex.travel.map((v,i)=>v-p[i]))>.5,movingFrom);
+      const movingPath=await page.evaluate(()=>{
+        const trail=window.qaScene.getObjectByName('centerTrail');
+        return {visible:trail?.visible,count:trail?.geometry.drawRange.count,lineSegments:trail?.isLineSegments,calls:window.qaRenderer.info.render.calls,points:window.qaRenderer.info.render.points};
+      });
+      assert.ok(movingPath.visible&&movingPath.lineSegments&&movingPath.count>0);assert.equal(movingPath.calls,2);assert.equal(movingPath.points,125000,'The moving centre path adds one line draw and preserves all cloud points');
       await page.evaluate(()=>window.qaBasePositions=window.qaCloud.geometry.attributes.position.array.slice());
       await page.keyboard.down('Space');
       await page.waitForFunction(()=>window.qaVortex.progress>0);
@@ -256,6 +266,7 @@ const {chromium}=require('playwright');
       assert.ok(completed.history.every((frame,index,frames)=>frame.progress>=0&&frame.progress<=1&&(index===0||frame.progress>=frames[index-1].progress)),'Progress stays bounded and never restarts');
       assert.equal(completed.baseIntact,true);assert.equal(completed.frozenTint,true);assert.equal(completed.frozenOffsets,true);assert.equal(completed.frozenJetDelay,true);assert.equal(completed.frozenBodies,true);
       assert.equal(completed.state.calls,1);assert.equal(completed.state.points,125000);
+      assert.equal(await page.evaluate(()=>window.qaScene.getObjectByName('centerTrail').visible),false,'The frozen centre path finishes fading before the cloud completes');
       const completePixels=await scenePixels(page);
       const expansionFrames=await page.evaluate(()=>window.qaExpansionFrames);
       assert.ok(expansionFrames.every(frame=>frame.expansion>0&&frame.expansion<=1&&frame.progress===0),'Any rendered expansion frames precede the vortex');
