@@ -1,12 +1,31 @@
-设计概述：
+设计概述
+
 我基于太阳系的信息可视化做了一些交互设计和趣味玩法的延伸（我想把一个内容做的更丰富和有趣而不单单只是零散的小作业，这也是我在这个课程一开始的计划）：
+
 1.更新了鼠标的UI显示，玩家双击可以进入全屏的游戏模式
+
 2.进入全屏模式后，玩家可控制的第三人称的奇异星球（玩家可以通过“WASD”键控制移动）
+
 3.奇异星球会不断变换颜色而且周围会有排斥场和拖尾效果（排斥场会将周围的点云推散，自身的色彩和拖尾会给其他星球暂时染色）
+
 4.玩家按下空格键会触发随机事件，即奇异星球会变成黑洞或其他特殊效果（各种效果会对虚拟的太阳系产生巨大改变）
+
 5.所有键位控制都会有实体UI显示，所以移动端打开的用户也能体验
 
-交互设计与玩家体验：
+交互设计与玩家体验
+
+我想创造一个可以在太阳系点云中穿梭的互动体验：玩家可以控制移动--发现自身的斥力--观察自身移动轨迹--查看自身行动造成的影响--在任何时间触发随机事件--太阳系产生巨大变化--恢复（实现循环）
+
+用户反馈与测试
+
+体验者A：双击进入的字难以第一时间发现，真正的玩法在进入游戏模式后。所以我的更改是:玩家第一次进入时直接进入全屏模式，并且伴有明确的UI提示，玩家依然可以退出全屏
+
+体验者B：1.进入时偶尔会产生崩溃，我测试后也遇到过但很少（未发现原因）2.可以加入ASD键不只是W键可以操作更顺滑，并且可以加入QE键来实现上下运动。我只增加了ASD键没有增加QE键，因为我不想再增加过度按键而且WASD键来操控更容易理解
+
+AI使用说明：
+
+
+
 
 Assignment 2（Previous content）：
 
@@ -16,8 +35,12 @@ The project lasted from September 10 to September 26, about 8 active development
 
 - Reserved content: always use the initial planets planetary data as the data source for tables, orbits and charts.
 
-- Discard content: 1.the first five separate indicator charts. They occupy space and are difficult, so they are finally merged into a five axis planetary parameter spectrum.
+- Discard content:
+
+- 1.the first five separate indicator charts. They occupy space and are difficult, so they are finally merged into a five axis planetary parameter spectrum.
+
 - 2.The early echarts desktop solution has also been replaced by the three.js web page solution for sharing through GitHub pages. Repeatedly modify the size relationship of planets to beautify the visual effect.
+
 - 3.Repeatedly modify the details of planetary point clouds, especially Saturn rings, to present a good-looking effect.
 
 - My work content: develop visual direction, scale, point size, transparency, density, planetary details, interaction mode and UI specification.
