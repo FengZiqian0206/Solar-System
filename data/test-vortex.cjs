@@ -156,12 +156,12 @@ const {chromium}=require('playwright');
       await page.keyboard.down('Space');
       const pulse=await page.evaluate(()=>{
         const controller=window.qaController,snapshot=()=>({expansion:controller.expansion,progress:controller.collapseProgress,growth:controller.growth,camera:window.qaComponentCamera.position.toArray(),travel:controller.influencePosition.toArray()}),samples=[snapshot()];
-        for(let index=0;index<4;index++){controller.update(.1,.15);samples.push(snapshot());}
+        for(let index=0;index<4;index++){controller.update(.1,.225);samples.push(snapshot());}
         return samples;
       });
       assert.ok(pulse.every(sample=>sample.progress===0),'The short expansion precedes the unchanged vortex clock');
-      assert.ok(pulse[0].expansion===0&&pulse[4].expansion===0,'Expansion returns to its original radius after its 0.6-second pulse');
-      assert.ok(pulse[1].expansion<.01&&pulse[2].expansion>.1&&pulse[2].expansion<.2&&pulse[3].expansion>.9,'The local pulse starts slowly and builds toward its late peak');
+      assert.ok(pulse[0].expansion===0&&pulse[4].expansion===0,'Expansion returns to its original radius after its 0.9-second pulse');
+      assert.ok(Math.abs(pulse[1].expansion-.5)<1e-8&&Math.abs(pulse[2].expansion-1)<1e-8&&Math.abs(pulse[3].expansion-.5)<1e-8,'The slower local pulse expands and settles symmetrically');
       assert.ok(pulse.every(sample=>sample.camera.every((value,index)=>value===pulse[0].camera[index])&&sample.travel.every((value,index)=>value===pulse[0].travel[index])),'The local pulse changes particles without moving the camera or coloured centre');
       await page.evaluate(()=>window.qaController.update(.1,12));
       const rect=await page.locator('#viewport').boundingBox(),point={x:rect.x+rect.width*.5,y:rect.y+rect.height*.4};
@@ -200,7 +200,7 @@ const {chromium}=require('playwright');
       assert.equal(await page.evaluate(()=>window.qaController.active),false,'Exit and Escape remain available during a repeated cycle');
       assert.equal(await page.evaluate(()=>document.body.classList.contains('is-roaming')),false);
       assert.deepEqual(errors,[]);
-      return {mobile,pulse,black,growth,checks:['accelerating 0.6-second expansion','in-progress and black-stage inputs do not exit','one-second black hold','three-second regrowth and one reset callback','camera and immersive state preserved','held Space does not restart / fresh Space repeats','Exit and Escape still work']};
+      return {mobile,pulse,black,growth,checks:['symmetric 0.9-second expansion','in-progress and black-stage inputs do not exit','one-second black hold','three-second regrowth and one reset callback','camera and immersive state preserved','held Space does not restart / fresh Space repeats','Exit and Escape still work']};
     }finally{await context.close();}
   }
   try{
@@ -306,7 +306,7 @@ const {chromium}=require('playwright');
         return {state:saved.state,history:saved.history,elapsed:saved.elapsed,baseIntact:saved.baseIntact,frozenTint:saved.frozenTint,frozenOffsets:saved.frozenOffsets,frozenJetDelay:saved.frozenJetDelay,frozenBodies:saved.frozenBodies};
       });
       assert.ok(completed.history.length>10);
-      assert.ok(completed.elapsed>=22.5&&completed.elapsed<=30,'Expansion plus the original vortex completes in about 24.6 real seconds');
+      assert.ok(completed.elapsed>=22.8&&completed.elapsed<=31,'Expansion plus the original vortex completes in about 24.9 real seconds');
       assert.ok(completed.history.every((frame,index,frames)=>frame.progress>=0&&frame.progress<=1&&(index===0||frame.progress>=frames[index-1].progress)),'Progress stays bounded and never restarts');
       assert.equal(completed.baseIntact,true);assert.equal(completed.frozenTint,true);assert.equal(completed.frozenOffsets,true);assert.equal(completed.frozenJetDelay,true);assert.equal(completed.frozenBodies,true);
       assert.equal(completed.state.calls,1);assert.equal(completed.state.points,125000);
@@ -324,7 +324,7 @@ const {chromium}=require('playwright');
       await resetChecks(page);
       const recovery=await page.evaluate(()=>({ready:window.qaCycleReady,frames:window.qaGrowthFrames.slice(),reset:window.qaRegrowReset,elapsed:(window.qaCycleReady.wall-window.qaTriggerWall)/1000}));
       assert.ok(recovery.frames.length>0&&recovery.frames[0].growth===0&&recovery.frames.every((frame,index,frames)=>frame.progress===0&&frame.growth>=0&&frame.growth<1&&(index===0||frame.growth>=frames[index-1].growth)),'The new solar system grows continuously from a rendered zero-size origin');
-      assert.ok(recovery.elapsed>=26.5&&recovery.elapsed<=38,'The first cycle includes the one-second hold and three-second regrowth');
+      assert.ok(recovery.elapsed>=26.8&&recovery.elapsed<=38,'The 28.9-second cycle includes the one-second hold and three-second regrowth');
       assert.ok(recovery.reset.tintZero&&recovery.reset.offsetZero&&recovery.reset.trailCleared&&recovery.reset.geometrySame,'Regrowth clears influence and trail while reusing the cloud geometry');
       assert.ok(recovery.reset.bodies.some((value,index)=>Math.abs(value-completed.state.bodies[index])>.001),'The new solar system restarts its orbital positions');
       assert.deepEqual(recovery.ready.camera,completed.state.camera);assert.deepEqual(recovery.ready.travel,started.travel);
@@ -339,7 +339,7 @@ const {chromium}=require('playwright');
       await page.keyboard.press('Escape');
       await page.waitForFunction(()=>!document.body.classList.contains('is-roaming')&&!document.fullscreenElement&&!document.pointerLockElement);
       await page.locator('h1').dblclick();await resetChecks(page);
-      report.desktop={beforePixels,completePixels,restoredPixels,recovery,shader,expansionFrames,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['accelerating local expansion before unchanged vortex','strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','held-key repeat safety across recovery','camera look and wheel during collapse','unpaused jet extension and early/middle/late/black/regrowth captures','24.6-second collapse then one-second hold and three-second recovery','frozen orbits, influence and launch schedule until black','immutable base coordinates','cached black scene renders black','same-camera fullscreen regrowth and automatic rearm','fresh Space starts a second cycle','Escape and re-entry reset']};
+      report.desktop={beforePixels,completePixels,restoredPixels,recovery,shader,expansionFrames,jetSpeeds,jetSchedule:{count:jetSchedule.core.length,spacing:jetSpacing,first:jetSchedule.core[0].delay,last:jetSchedule.core.at(-1).delay,attributeBytes:jetSchedule.bytes,frozen:completed.frozenJetDelay},nearLoss,farLoss,cumulativeRotation,largestRotationStep,elapsed:completed.elapsed,frames:completed.history.length,progress:{first:completed.history[0].progress,last:completed.history.at(-1).progress,monotonic:true},render:{calls:completed.state.calls,points:completed.state.points,geometries:completed.state.geometries,textures:completed.state.textures,dpr:completed.state.dpr},checks:['symmetric 0.9-second local expansion before unchanged vortex','strong GPU twisting with slower distant contraction','no exterior opacity fade / absorption only inside core','individually delayed straight centre-axis jets / preparation / deceleration','per-particle flight-age fade from one to four seconds / no waiting fade / equal-age consistency','unique regularly spaced current-core launch slots','W then Space stops movement','held-key repeat safety across recovery','camera look and wheel during collapse','unpaused jet extension and early/middle/late/black/regrowth captures','24.9-second collapse then one-second hold and three-second recovery','frozen orbits, influence and launch schedule until black','immutable base coordinates','cached black scene renders black','same-camera fullscreen regrowth and automatic rearm','fresh Space starts a second cycle','Escape and re-entry reset']};
       assert.deepEqual(desktop.errors,[]);assert.deepEqual(desktop.failed,[]);
     }finally{await desktop.context.close();}
 

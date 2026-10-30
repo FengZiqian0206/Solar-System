@@ -20,7 +20,7 @@ const {chromium}=require('playwright');
         const {THREE}=await import(new URL('./renderer-support.js?v=visual-balance-1',location.href).href),after=THREE.Points.prototype.onAfterRender;
         THREE.Points.prototype.onAfterRender=function(renderer,scene,camera,...args){
           after.call(this,renderer,scene,camera,...args);
-          if(!this.material?.uniforms?.uGridStep||this.geometry.attributes.aDetail)return;
+          if(this.userData.qaProbe||!this.material?.uniforms?.uGridStep||this.geometry.attributes.aDetail)return;
           window.qaDensityCloud=this;window.qaDensityRenderer=renderer;window.qaDensityScene=scene;window.qaDensityCamera=camera;
           const u=this.material.uniforms;
           window.qaDensity={count:this.geometry.attributes.position.count,active:u.uRoam.value,progress:u.uCollapse.value,expansion:u.uExpansion.value,time:u.uTime.value,travel:u.uInfluenceCenter.value.toArray(),player:u.uPlayer.value.toArray()};
@@ -36,7 +36,34 @@ const {chromium}=require('playwright');
       return page.evaluate(()=>{
         const cloud=window.qaDensityCloud,a=cloud.geometry.attributes,u=cloud.material.uniforms,n=Math.round(Math.cbrt(a.position.count)),base=a.position.array,step=u.uGridStep.value,half=u.uHalf.value;
         const ijk=u.uPlayer.value.toArray().map(value=>Math.round((value+half)/step)),index=(ijk[0]*n+ijk[1])*n+ijk[2];
-        return {n,count:a.position.count,step,half,dense:u.uDenseMode.value,spaceScale:u.uSpaceScale.value,uuid:cloud.geometry.uuid,bounds:[base[0],base[base.length-1]],adjacentStep:base[5]-base[2],selected:[base[index*3],base[index*3+1],base[index*3+2]],player:u.uPlayer.value.toArray(),attributes:Object.fromEntries(['aSeed','aPlayerTint','aPlayerOffset','aJetDelay'].map(name=>[name,{count:a[name].count,itemSize:a[name].itemSize,bytes:a[name].array.byteLength}])),detailVisible:cloud.children.some(child=>child.visible),calls:window.qaDensityRenderer.info.render.calls,points:window.qaDensityRenderer.info.render.points,dpr:window.qaDensityRenderer.getPixelRatio(),memory:{...window.qaDensityRenderer.info.memory}};
+        return {n,count:a.position.count,step,half,dense:u.uDenseMode.value,spaceScale:u.uSpaceScale.value,spaceOpacity:u.uSpaceOpacity.value,uuid:cloud.geometry.uuid,bounds:[base[0],base[base.length-1]],adjacentStep:base[5]-base[2],selected:[base[index*3],base[index*3+1],base[index*3+2]],player:u.uPlayer.value.toArray(),attributes:Object.fromEntries(['aSeed','aPlayerTint','aPlayerOffset','aJetDelay'].map(name=>[name,{count:a[name].count,itemSize:a[name].itemSize,bytes:a[name].array.byteLength}])),detailVisible:cloud.children.some(child=>child.visible),calls:window.qaDensityRenderer.info.render.calls,points:window.qaDensityRenderer.info.render.points,dpr:window.qaDensityRenderer.getPixelRatio(),memory:{...window.qaDensityRenderer.info.memory}};
+      });
+    }
+    async function isolatedSpacePoint(){
+      return page.evaluate(async()=>{
+        const {THREE}=await import('./renderer-support.js?v=visual-balance-1'),renderer=window.qaDensityRenderer,material=window.qaDensityCloud.material.clone(),u=material.uniforms;
+        material.blending=THREE.NoBlending;
+        u.uTime.value=0;u.uZoom.value=1;u.uPixelRatio.value=1;u.uSpaceScale.value=1;u.uCollapse.value=0;u.uExpansion.value=0;u.uGrowth.value=1;u.uViewport.value.set(64,64);
+        u.uPlayer.value.set(1000,1000,1000);u.uInfluenceCenter.value.set(1000,1000,1000);u.uSaturn.value.set(1000,1000,1000);
+        u.uBodies.value.forEach(body=>body.set(1000,1000,1000,1));u.uShadowDirs.value.forEach(direction=>direction.set(0,0,0));
+        const geometry=new THREE.BufferGeometry();
+        geometry.setAttribute('position',new THREE.Float32BufferAttribute([0,0,0],3));geometry.setAttribute('aSeed',new THREE.Float32BufferAttribute([.37],1));
+        geometry.setAttribute('aPlayerTint',new THREE.Float32BufferAttribute([0],1));geometry.setAttribute('aPlayerOffset',new THREE.Float32BufferAttribute([0,0,0],3));
+        geometry.setAttribute('aJetDelay',new THREE.Float32BufferAttribute([0],1));geometry.setAttribute('aDetail',new THREE.Float32BufferAttribute([0],1));
+        const scene=new THREE.Scene(),point=new THREE.Points(geometry,material),camera=new THREE.PerspectiveCamera(48,1,.1,100);
+        point.userData.qaProbe=true;point.frustumCulled=false;scene.add(point);camera.position.set(0,0,28);camera.lookAt(0,0,0);
+        const target=new THREE.WebGLRenderTarget(64,64),pixels=new Uint8Array(64*64*4),previous=renderer.getRenderTarget(),clear=renderer.getClearColor(new THREE.Color()),clearAlpha=renderer.getClearAlpha();
+        function sample(roam,opacity){
+          u.uRoam.value=roam;u.uSpaceOpacity.value=opacity;renderer.setRenderTarget(target);renderer.setClearColor(0,0);renderer.render(scene,camera);renderer.readRenderTargetPixels(target,0,0,64,64,pixels);
+          let coverage=0,minX=64,minY=64,maxX=-1,maxY=-1,maxAlpha=0;
+          for(let y=0;y<64;y++)for(let x=0;x<64;x++){
+            const alpha=pixels[(y*64+x)*4+3];maxAlpha=Math.max(maxAlpha,alpha);
+            if(alpha){coverage++;minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y);}
+          }
+          return {coverage,width:coverage?maxX-minX+1:0,height:coverage?maxY-minY+1:0,maxAlpha};
+        }
+        try{return {overview:sample(0,1),roaming:sample(1,1),productionOpacity:sample(1,window.qaDensityCloud.material.uniforms.uSpaceOpacity.value)};}
+        finally{renderer.setRenderTarget(previous);renderer.setClearColor(clear,clearAlpha);target.dispose();geometry.dispose();material.dispose();}
       });
     }
     async function centerTrailState(){
@@ -54,6 +81,7 @@ const {chromium}=require('playwright');
       assert.ok(Math.abs(state.adjacentStep-state.step)<.000003&&Math.abs(state.bounds[0]+26)<.000003&&Math.abs(state.bounds[1]-26)<.000003,'Each mode fills the same cube with its own standard grid spacing');
       assert.ok(state.selected.every((value,index)=>Math.abs(value-state.player[index])<.00001),'Selected player is an existing vertex of this density');
       assert.equal(state.dense,n>50?1:0);assert.equal(state.detailVisible,false,'Roaming uses the complete base lattice without the extra overview layer');
+      assert.equal(state.spaceScale,1,'Density does not shrink space-particle size');assert.ok(Math.abs(state.spaceOpacity-(50/n)**2)<1e-12,'Dense-mode overlap is compensated through opacity');
       assert.equal(state.calls,1);assert.equal(state.points,n**3);assert.equal(state.dpr,1);
       const emptyTrail=await centerTrailState();
       assert.ok(emptyTrail?.lineSegments&&!emptyTrail.visible&&emptyTrail.count===0,'Every roaming entry starts with a cleared centre path');
@@ -62,6 +90,12 @@ const {chromium}=require('playwright');
       await page.locator('#density').evaluate((element,value)=>{element.value=String(value);element.dispatchEvent(new Event('input',{bubbles:true}));},n===150?50:150);
       assert.equal(await page.locator('#density').inputValue(),String(n),'Dispatched changes cannot rebuild density while roaming');
       assert.equal(await page.evaluate(()=>window.qaDensityCloud.geometry.uuid),state.uuid);
+      const spacePoint=n>50?await isolatedSpacePoint():null;
+      if(spacePoint){
+        assert.ok(spacePoint.overview.coverage>0&&spacePoint.overview.width>3&&spacePoint.overview.width<13,'The representative space point is away from the former roaming size clamps');
+        assert.deepEqual(spacePoint.roaming,spacePoint.overview,'At the same camera, zoom, viewport and opacity, dense overview and roaming points have the same diameter');
+        assert.ok(spacePoint.productionOpacity.maxAlpha<spacePoint.roaming.maxAlpha,'Production density compensation changes alpha rather than point size');
+      }
 
       const start=await page.evaluate(()=>window.qaDensity.travel);
       await page.keyboard.down('w');
@@ -134,7 +168,7 @@ const {chromium}=require('playwright');
       assert.equal(await page.locator('#density').isDisabled(),false,'Exit restores overview density control');
       const clearedPath=await centerTrailState();
       assert.ok(!clearedPath.visible&&clearedPath.count===0,'Exit hides and clears the centre path');
-      densities.push({n,...state,litPixels:pixels,jets:{count:jets.cells.length,spacing,gridStep:jets.step},centerTrail:{movingVertices:path.count,stationaryVertices:stationaryPath.count,frozenVertices:frozenPath.count,fadeBefore:frozenPath.fade,fadeAfter:fadedPath.fade,cleared:true},frozen});
+      densities.push({n,...state,spacePoint,litPixels:pixels,jets:{count:jets.cells.length,spacing,gridStep:jets.step},centerTrail:{movingVertices:movingPath.count,stationaryVertices:stationaryPath.count,frozenVertices:frozenPath.count,fadeBefore:frozenPath.fade,fadeAfter:fadedPath.fade,cleared:true},frozen});
     }
     await exercise(50);
     for(const n of [100,150,50]){
@@ -144,6 +178,7 @@ const {chromium}=require('playwright');
       assert.equal(await page.locator('#densityValue').textContent(),`${n} × ${n} × ${n}`);
       assert.equal(await page.locator('#pointCount').textContent(),(n**3).toLocaleString('en-US'));
       const overview=await gridState();
+      assert.equal(overview.spaceScale,1);assert.equal(overview.spaceOpacity,1);
       assert.equal(overview.detailVisible,n>50);assert.equal(overview.calls,n>50?2:1);
       if(n===50)break;
       await page.locator('h1').dblclick();await exercise(n);
