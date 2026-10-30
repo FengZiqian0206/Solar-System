@@ -39,6 +39,10 @@ Assignment 2（Previous content）：
 This is the motion simulation of the eight planets in the solar system : Based on the real revolution period, eccentricity and Kepler equation of the eight planets.
 I want to build a miniature three-dimensional solar system in the form of a whole system lattice. The color depth and size of the lattice represent the known tangible objects in space, and these information change with time.
 
+Information details：
+
+Data source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
+
 You can :
 1. Drag the mouse or scroll wheel to zoom and observe from different perspectives.
 2. Click the full screen view window. 
@@ -47,8 +51,6 @@ You can :
 5. Switch the data visualization chart.
 
 <img width="2750" height="1816" alt="main" src="https://github.com/user-attachments/assets/0cd90d7d-ed94-4b5c-aa8c-5092c2600380" />
-
-Information details：Data source: https://ssd.jpl.nasa.gov/planets/approx_pos.html
 
 SEMI-MAJOR AXIS (AU)	PERIOD (DAYS)	PERIOD (EARTH YEARS)	MEAN SPEED (km/s)	MEAN RADIUS (km)
 
